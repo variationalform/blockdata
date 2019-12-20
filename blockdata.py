@@ -105,6 +105,7 @@ class blockdata:
   Nz      = 5       # default value for the mesh density in z direction
   Nt      = 5       # default value for the number of time steps
   rdeg    = 2       # order of CG elements
+  Rdeg    = 3       # order of polynomials for exact solutions
   dt      = T/Nt    # time step
   #hx     = 1.0/Nx  # mesh width in x direction
   #hy     = 1.0/Ny  # mesh width in y direction
@@ -214,6 +215,7 @@ class blockdata:
     self.Nx = Nx;
     self.Ny = Ny;
     self.Nz = Nz;
+    # if these ever get used then update the command line overrides
     # self.hx = (self.xH-self.xL)/self.Nx
     # self.hy = (self.yH-self.yL)/self.Ny
     # self.hz = (self.zH-self.zL)/self.Nz
@@ -767,14 +769,117 @@ def save_xcyczc(xcyczc, bd, plotName, results_dir):
 # -  -  -  -  -  -  -  -  -  -  -  -  -  -  -  -  -  -  -  -  -  -  -  -  -  -  -  -  -  -  -  -  -   
 # -  -  -  -  -  -  -  -  -  -  -  -  -  -  -  -  -  -  -  -  -  -  -  -  -  -  -  -  -  -  -  -  -   
 
+# help function
+def usage():
+  print("Solver methods available through coding...")
+  list_lu_solver_methods(); print(" ")
+  list_krylov_solver_methods(); print(" ")
+  list_krylov_solver_preconditioners(); print(" ")
+  print("\nCommand line options with n an integer and f a float:\n")
+  print("-h   or --help")
+  print("-v n or --garrulous n for verbosity")
+  print("-b n or --first n     integer label for the first of the batch runs (default 1, inclusive)")
+  print("-B n or --last n      integer label for the last of the batch runs (default 2, inclusive)")
+  print("-g n or --gfx  n      to ask for graphics every n'th batch run, or none if not given")
+  print("-r n or --rdeg n      to specify FE polynomial degree")
+  print("-R n or --Rdeg n      to specify 'exact solution' polynomial degree")
+  print("-X n or --example n   to specify the example to run")
+  print("-N n or --Nxyz n      to specify Nx = Ny = Nz")
+  print("-n n or --Nt n        to specify Nt")
+  print("-T f or --Tfinal f    to specify final time, T")
+  print(" ")
+  print("        --Nx n        to specify Nx")
+  print("        --Ny n        to specify Ny")
+  print("        --Nz n        to specify Nz")
+  os.system('date +%Y_%m_%d_%H-%M-%S')
+  print (time.strftime("%d/%m/%Y at %H:%M:%S"))
+
 # controlling routine
 if __name__ == '__main__':
-  # initialise for a batch of runs
+
+  # initialise for a batch of runs, we can alter class defaults here
   bd = blockdata(T=2.0, eps=0.01, Nt=50, Nx=30, Ny=10, Nz=5)
   
+  # and then parse the command line to alter them again if need be
+  try:
+    opts, args = getopt.getopt(sys.argv[1:], "hv:b:B:g:r:R:N:n:T:X:",
+                   [
+                    "help",           # obvious
+                    "garrulous=",     # level of verbosity
+                    "first="          # integer for first batch run label (default 1, inclusive)")
+                    "last="           # integer for last batch run label (default 2, inclusive)")
+                    "gfx=",           # if non-zero d generate gfx every d-th batch run 
+                    "rdeg=",          # FE polynomial degree
+                    "Rdeg=",          # solution polynomial degree
+                    "Nxyz=",          # set Nx = Ny = Nz to the given argument 
+                    "Nx=",            # set Nx to the given argument 
+                    "Ny=",            # set Ny to the given argument 
+                    "Nz=",            # set Nz to the given argument 
+                    "Nt=",            # set Nt to the given argument
+                    "Tfinal=",        # final time, T
+                    "example="        # integer for example number
+                    ])
+
+  except getopt.GetoptError as err:
+    # print help information and exit:
+    print(err) # will print something like "option -a not recognized"
+    usage()
+    sys.exit(2)
+
+  beingloud = 0
   # give these runs labels - end_run doesn't get executed due to range() 
-  start_run=100; end_run=101
-  gfx_step = 3
+  start_run=200; end_run=208
+  gfx_step = 0
+  # get the command line modifications and ensure consistency of class variables 
+  print('Command Line: using: ')
+  for o, a in opts:
+    if o in ("-v","--garrulous"):
+      beingloud = int(a)
+      if beingloud > 19: print('loud level %d;' % beingloud),
+    elif o in ("-h", "--help"):
+      usage()
+      sys.exit()
+    elif o in ("-b", "--first"):
+      start_run = int(a)
+      if beingloud > 19: print('start_run = %d  (inclusive);' % start_run),
+    elif o in ("-B", "--last"):
+      end_run = 1+int(a)
+      if beingloud > 19: print('end_run = %d (not inclusive);' % end_run),
+    elif o in ("-g", "--gfx"):
+      gfx_step = int(a)
+      if beingloud > 19: print('gfx_step = %d;' % gfx_step),
+    elif o in ("-r", "--rdeg"):
+      bd.rdeg = int(a)
+      if beingloud > 19: print('rdeg = %d;' % bd.rdeg),
+    elif o in ("-R", "--Rdeg"):
+      bd.Rdeg = int(a)
+      if beingloud > 19: print('Rdeg = %d;' % bd.Rdeg),
+    elif o in ("-N", "--Nxyz"):
+      bd.Nx = bd.Ny = bd.Nz = int(a)
+      if beingloud > 19: print('Nx, Ny, Nz = %d, %d, %d;' % (bd.Nx,bd.Ny,bd.Nz) ),
+    elif o in ("--Nx"):
+      bd.Nx = int(a)
+      if beingloud > 19: print('Nx = %d' % bd.Nx),
+    elif o in ("--Ny"):
+      bd.Ny = int(a)
+      if beingloud > 19: print('Ny = %d' % bd.Ny),
+    elif o in ("--Nz"):
+      bd.Nz = int(a)
+      if beingloud > 19: print('Nz = %d' % bd.Nz),
+    elif o in ("-n", "--Nt"):
+      bd.Nt = int(a); bd.dt = bd.T/bd.Nt
+      if beingloud > 19: print('Nt = %d;' % bd.Nt),
+    elif o in ("-T", "--Tfinal"):
+      bd.T = float(a); bd.dt = bd.T/bd.Nt
+      if beingloud > 19: print('T = %f;' % bd.T),
+    elif o in ("-X", "--example"):
+      example = int(a)
+      if beingloud > 19: print('example %d;' % example),
+    else:
+      assert False, "unhandled option"
+
+  print(""); print('Command line parsing complete...')
+
   # create a 'results_start_end' directory, if it doesn't already exist
   results_dir = "./results_"+str(start_run)+"_"+str(end_run-1)
   xcyczc = np.random.rand(end_run - start_run,3)
@@ -792,8 +897,7 @@ if __name__ == '__main__':
     zc = bd.zL + zc*(bd.zH-bd.zL)
     xcyczc[run-start_run] = xc,yc,zc
     # determine whether to create sensor traces or not
-    # bd.gfx = 0;  # need this for long server run
-    bd.gfx = 1 if not (run-1) % gfx_step else 0;
+    bd.gfx = 1 if (gfx_step and not (run-start_run) % gfx_step) else 0;
     # get a string for this run's output directory
     output_dir = results_dir+"/"+str(run)
     # either it doesn't exist or it is dirty with old runs; deal with both 
