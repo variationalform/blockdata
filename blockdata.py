@@ -6,15 +6,13 @@ import numpy as np
 from cycler import cycler
 import matplotlib.pyplot as plt
 import matplotlib.ticker as mtick
+from zipfile import ZipFile
+  
 
 """
-Solve 3D linear quasistatic viscoelasticity problem in time to generate virtual sensor data
-
-Based on demo_elastodynamics.py as downloaded on 10 Dec 2019 from
-# https://fenicsproject.org/docs/dolfin/latest/python/demos/elastodynamics/
-
-And also on ft06_elasticity.py as downloaded on 10 Dec 2019 from
-# https://github.com/hplgit/fenics-tutorial/blob/master/pub/python/vol1/ft06_elasticity.py
+Solve 3D linear quasistatic viscoelasticity problem in time to generate virtual
+sensor data on the surface of parallelapiped block with a localised internal vibrating
+source disturbance.
 
 Copyright (c) 2020, Simon Shaw (simon.shaw89@alumni.imperial.ac.uk)
 The moral right of the author has been asserted.
@@ -36,6 +34,12 @@ Alternatively, write to the Free Software Foundation, Inc.,
 51 Franklin Street, Fifth Floor, Boston, MA  02110-1301, USA.
 Also add information on how to contact you by electronic and paper mail.
 
+This code is based on demo_elastodynamics.py as downloaded on 10 Dec 2019 from
+# https://fenicsproject.org/docs/dolfin/latest/python/demos/elastodynamics/
+
+And also on ft06_elasticity.py as downloaded on 10 Dec 2019 from
+# https://github.com/hplgit/fenics-tutorial/blob/master/pub/python/vol1/ft06_elasticity.py
+
 Remarks:
 - For line styles, see https://matplotlib.org/gallery/lines_bars_and_markers/linestyles.html?highlight=linestyles
 - For the property cycler see https://matplotlib.org/tutorials/intermediate/color_cycle.html
@@ -45,16 +49,6 @@ Remarks:
   - https://matplotlib.org/api/markers_api.html#matplotlib.markers.MarkerStyle
   - https://matplotlib.org/gallery/lines_bars_and_markers/marker_fillstyle_reference.html
   - https://matplotlib.org/3.1.1/tutorials/toolkits/mplot3d.html
-
-
-To Do:
-- It's possible that 'project' is expensive in the sensor readings post processing. Could
-replace with finite difference evaluations of u1, u2, ... etc. to x and t derivatives.
-
-- Need to increase time point resolution in output file in case small dt's are ever needed.
-
-- the 3D scatter plot of the random source locations is poorly centered and may be
-be clipped if the random points are clusrtered to one side. 
 
 """
 
@@ -208,6 +202,8 @@ class blockdata:
   # runtime config variables
   gfx     = 0       # if 0, then do not create sensor graphics for the run
   
+# -  -  -  -  -  -  -  -  -  -  -  -  -  -  -  -  -  -  -  -  -  -  -  -  -  -  -  -  -  -  -  -  -   
+# -  -  -  -  -  -  -  -  -  -  -  -  -  -  -  -  -  -  -  -  -  -  -  -  -  -  -  -  -  -  -  -  -   
 
   def __init__(self, T, eps, Nt, Nx, Ny, Nz):
     self.T = T; self.eps = eps; self.f.eps = self.eps
@@ -257,13 +253,14 @@ class blockdata:
       nfs = 16          # normal font size
       nlw = 3; tlw=1    # normal, thin line width
       nms = 10          # normal marker size
+      plt.rc('axes', prop_cycle=default_cycler)   # move this to be first command! (see postpro.sty)
       plt.rc('text', usetex=True)
       plt.rc('font', family='serif')
       plt.rcParams['text.latex.preamble']=[r"\usepackage{amsmath}"]  # for \boldsymbol etc
       plt.rcParams.update({'font.size': nfs})
       plt.tick_params(labelsize = nfs)
       plt.gcf().subplots_adjust(left=0.20)
-      plt.rc('axes', prop_cycle=default_cycler)
+#      plt.rc('axes', prop_cycle=default_cycler)   # move this to be first command! (see postpro.sty)
       plt.rc('lines', linewidth=nlw)
 
       times = np.linspace(self.dt,self.T,num=self.Nt-1, endpoint=False)
@@ -278,8 +275,12 @@ class blockdata:
         exit(0)
       plt.xlabel(r'$t$ (seconds)',fontsize = nfs)
       plt.ylabel(u_label+'$ at the '+sens_type,fontsize = nfs)
+#      print('u_label = '+u_label+'$'); cont = input()
       for c in range(0, v.shape[0]):
         plt.plot(times, v[c,:,qn], label=label+ str(c)+')$')
+#        if u_label == '$u_{1y}':
+#          print(sens_type+' ('+str(v.shape[0])+'): u_label = '+u_label+'$ for c = '+str(c)+', and qn = '+str(qn))
+#          print(times, v[c,:,qn])
       plt.tight_layout(pad=0.4, w_pad=0.5, h_pad=1.0)
       plt.legend(loc="lower left",fontsize=nfs)
       plt.savefig(savedir+'/png/'+fn+'.png', format='png', dpi=750)
@@ -302,7 +303,7 @@ class blockdata:
       self.accl_uy = np.zeros((self.accl.shape[0],self.Nt-1, 9))
       self.accl_uz = np.zeros((self.accl.shape[0],self.Nt-1, 9))
     else:
-      # move this away - it isn't symmetrised in the mics routine      !!!!!!!!!!!!!!!!!!!!!!!!
+      # move this away - it isn't symmeterised in the mics routine      !!!!!!!!!!!!!!!!!!!!!!!!
       self.tp.write("{0:10.3e}\n".format(tn-dt) )
 
     for c in range(0, self.accl.shape[0]):
@@ -355,7 +356,7 @@ class blockdata:
         self.accl_uy[c,n,7] = (u3y(x,y,z)-upp3y(x,y,z))/(2*dt)
         self.accl_uy[c,n,8] = (2*up3y(x,y,z)-u3y(x,y,z)-upp3y(x,y,z))/(dt*dt)
         # z derivatives
-        ux   = Function(Pv); uz   = project(  u.dx(2), Pv)
+        uz   = Function(Pv); uz   = project(  u.dx(2), Pv)
         upz  = Function(Pv); upz  = project( up.dx(2), Pv)
         uppz = Function(Pv); uppz = project(upp.dx(2), Pv)
         u1z,   u2z,   u3z   = uz.split();
@@ -430,45 +431,45 @@ class blockdata:
   
     if finished and self.gfx:
       # first for u etc
-      self.plot_sensor_trace(savedir,'accl_u1',  '$u_{1}',     'accelerometers',self.accl_u,qn=0)
-      self.plot_sensor_trace(savedir,'accl_u1t', '$u_{1t}',    'accelerometers',self.accl_u,qn=1)
-      self.plot_sensor_trace(savedir,'accl_u1tt','$u_{1tt}',   'accelerometers',self.accl_u,qn=2)
-      self.plot_sensor_trace(savedir,'accl_u2',  '$u_{2}',     'accelerometers',self.accl_u,qn=3)
-      self.plot_sensor_trace(savedir,'accl_u2t', '$u_{2t}',    'accelerometers',self.accl_u,qn=4)
-      self.plot_sensor_trace(savedir,'accl_u2tt','$u_{2tt}',   'accelerometers',self.accl_u,qn=5)
-      self.plot_sensor_trace(savedir,'accl_u3',  '$u_{3}',     'accelerometers',self.accl_u,qn=6)
-      self.plot_sensor_trace(savedir,'accl_u3t', '$u_{3t}',    'accelerometers',self.accl_u,qn=7)
-      self.plot_sensor_trace(savedir,'accl_u3tt','$u_{3tt}',   'accelerometers',self.accl_u,qn=8)
+      self.plot_sensor_trace(savedir,'u1_accl',  '$u_{1}',     'accelerometers',self.accl_u,qn=0)
+      self.plot_sensor_trace(savedir,'u1t_accl', '$u_{1t}',    'accelerometers',self.accl_u,qn=1)
+      self.plot_sensor_trace(savedir,'u1tt_accl','$u_{1tt}',   'accelerometers',self.accl_u,qn=2)
+      self.plot_sensor_trace(savedir,'u2_accl',  '$u_{2}',     'accelerometers',self.accl_u,qn=3)
+      self.plot_sensor_trace(savedir,'u2t_accl', '$u_{2t}',    'accelerometers',self.accl_u,qn=4)
+      self.plot_sensor_trace(savedir,'u2tt_accl','$u_{2tt}',   'accelerometers',self.accl_u,qn=5)
+      self.plot_sensor_trace(savedir,'u3_accl',  '$u_{3}',     'accelerometers',self.accl_u,qn=6)
+      self.plot_sensor_trace(savedir,'u3t_accl', '$u_{3t}',    'accelerometers',self.accl_u,qn=7)
+      self.plot_sensor_trace(savedir,'u3tt_accl','$u_{3tt}',   'accelerometers',self.accl_u,qn=8)
       # for u_x etc..
-      self.plot_sensor_trace(savedir,'accl_u1x',  '$u_{1x}',   'accelerometers',self.accl_ux,qn=0)
-      self.plot_sensor_trace(savedir,'accl_u1xt', '$u_{1xt}',  'accelerometers',self.accl_ux,qn=1)
-      self.plot_sensor_trace(savedir,'accl_u1xtt','$u_{1xtt}', 'accelerometers',self.accl_ux,qn=2)
-      self.plot_sensor_trace(savedir,'accl_u2x',  '$u_{2x}',   'accelerometers',self.accl_ux,qn=3)
-      self.plot_sensor_trace(savedir,'accl_u2xt', '$u_{2xt}',  'accelerometers',self.accl_ux,qn=4)
-      self.plot_sensor_trace(savedir,'accl_u2xtt','$u_{2xtt}', 'accelerometers',self.accl_ux,qn=5)
-      self.plot_sensor_trace(savedir,'accl_u3x',  '$u_{3x}',   'accelerometers',self.accl_ux,qn=6)
-      self.plot_sensor_trace(savedir,'accl_u3xt', '$u_{3xt}',  'accelerometers',self.accl_ux,qn=7)
-      self.plot_sensor_trace(savedir,'accl_u3xtt','$u_{3xtt}', 'accelerometers',self.accl_ux,qn=8)
-      # for u_x etc..
-      self.plot_sensor_trace(savedir,'accl_u1y',  '$u_{1y}',   'accelerometers',self.accl_uy,qn=0)
-      self.plot_sensor_trace(savedir,'accl_u1yt', '$u_{1yt}',  'accelerometers',self.accl_uy,qn=1)
-      self.plot_sensor_trace(savedir,'accl_u1ytt','$u_{1ytt}', 'accelerometers',self.accl_uy,qn=2)
-      self.plot_sensor_trace(savedir,'accl_u2y',  '$u_{2y}',   'accelerometers',self.accl_uy,qn=3)
-      self.plot_sensor_trace(savedir,'accl_u2yt', '$u_{2yt}',  'accelerometers',self.accl_uy,qn=4)
-      self.plot_sensor_trace(savedir,'accl_u2ytt','$u_{2ytt}', 'accelerometers',self.accl_uy,qn=5)
-      self.plot_sensor_trace(savedir,'accl_u3y',  '$u_{3y}',   'accelerometers',self.accl_uy,qn=6)
-      self.plot_sensor_trace(savedir,'accl_u3yt', '$u_{3yt}',  'accelerometers',self.accl_uy,qn=7)
-      self.plot_sensor_trace(savedir,'accl_u3ytt','$u_{3ytt}', 'accelerometers',self.accl_uy,qn=8)
+      self.plot_sensor_trace(savedir,'u1x_accl',  '$u_{1x}',   'accelerometers',self.accl_ux,qn=0)
+      self.plot_sensor_trace(savedir,'u1xt_accl', '$u_{1xt}',  'accelerometers',self.accl_ux,qn=1)
+      self.plot_sensor_trace(savedir,'u1xtt_accl','$u_{1xtt}', 'accelerometers',self.accl_ux,qn=2)
+      self.plot_sensor_trace(savedir,'u2x_accl',  '$u_{2x}',   'accelerometers',self.accl_ux,qn=3)
+      self.plot_sensor_trace(savedir,'u2xt_accl', '$u_{2xt}',  'accelerometers',self.accl_ux,qn=4)
+      self.plot_sensor_trace(savedir,'u2xtt_accl','$u_{2xtt}', 'accelerometers',self.accl_ux,qn=5)
+      self.plot_sensor_trace(savedir,'u3x_accl',  '$u_{3x}',   'accelerometers',self.accl_ux,qn=6)
+      self.plot_sensor_trace(savedir,'u3xt_accl', '$u_{3xt}',  'accelerometers',self.accl_ux,qn=7)
+      self.plot_sensor_trace(savedir,'u3xtt_accl','$u_{3xtt}', 'accelerometers',self.accl_ux,qn=8)
+      # for u_y etc..
+      self.plot_sensor_trace(savedir,'u1y_accl',  '$u_{1y}',   'accelerometers',self.accl_uy,qn=0)
+      self.plot_sensor_trace(savedir,'u1yt_accl', '$u_{1yt}',  'accelerometers',self.accl_uy,qn=1)
+      self.plot_sensor_trace(savedir,'u1ytt_accl','$u_{1ytt}', 'accelerometers',self.accl_uy,qn=2)
+      self.plot_sensor_trace(savedir,'u2y_accl',  '$u_{2y}',   'accelerometers',self.accl_uy,qn=3)
+      self.plot_sensor_trace(savedir,'u2yt_accl', '$u_{2yt}',  'accelerometers',self.accl_uy,qn=4)
+      self.plot_sensor_trace(savedir,'u2ytt_accl','$u_{2ytt}', 'accelerometers',self.accl_uy,qn=5)
+      self.plot_sensor_trace(savedir,'u3y_accl',  '$u_{3y}',   'accelerometers',self.accl_uy,qn=6)
+      self.plot_sensor_trace(savedir,'u3yt_accl', '$u_{3yt}',  'accelerometers',self.accl_uy,qn=7)
+      self.plot_sensor_trace(savedir,'u3ytt_accl','$u_{3ytt}', 'accelerometers',self.accl_uy,qn=8)
       # for u_z etc..
-      self.plot_sensor_trace(savedir,'accl_u1z',  '$u_{1z}',   'accelerometers',self.accl_uz,qn=0)
-      self.plot_sensor_trace(savedir,'accl_u1zt', '$u_{1zt}',  'accelerometers',self.accl_uz,qn=1)
-      self.plot_sensor_trace(savedir,'accl_u1ztt','$u_{1ztt}', 'accelerometers',self.accl_uz,qn=2)
-      self.plot_sensor_trace(savedir,'accl_u2z',  '$u_{2z}',   'accelerometers',self.accl_uz,qn=3)
-      self.plot_sensor_trace(savedir,'accl_u2zt', '$u_{2zt}',  'accelerometers',self.accl_uz,qn=4)
-      self.plot_sensor_trace(savedir,'accl_u2ztt','$u_{2ztt}', 'accelerometers',self.accl_uz,qn=5)
-      self.plot_sensor_trace(savedir,'accl_u3z',  '$u_{3z}',   'accelerometers',self.accl_uz,qn=6)
-      self.plot_sensor_trace(savedir,'accl_u3zt', '$u_{3zt}',  'accelerometers',self.accl_uz,qn=7)
-      self.plot_sensor_trace(savedir,'accl_u3ztt','$u_{3ztt}', 'accelerometers',self.accl_uz,qn=8)
+      self.plot_sensor_trace(savedir,'u1z_accl',  '$u_{1z}',   'accelerometers',self.accl_uz,qn=0)
+      self.plot_sensor_trace(savedir,'u1zt_accl', '$u_{1zt}',  'accelerometers',self.accl_uz,qn=1)
+      self.plot_sensor_trace(savedir,'u1ztt_accl','$u_{1ztt}', 'accelerometers',self.accl_uz,qn=2)
+      self.plot_sensor_trace(savedir,'u2z_accl',  '$u_{2z}',   'accelerometers',self.accl_uz,qn=3)
+      self.plot_sensor_trace(savedir,'u2zt_accl', '$u_{2zt}',  'accelerometers',self.accl_uz,qn=4)
+      self.plot_sensor_trace(savedir,'u2ztt_accl','$u_{2ztt}', 'accelerometers',self.accl_uz,qn=5)
+      self.plot_sensor_trace(savedir,'u3z_accl',  '$u_{3z}',   'accelerometers',self.accl_uz,qn=6)
+      self.plot_sensor_trace(savedir,'u3zt_accl', '$u_{3zt}',  'accelerometers',self.accl_uz,qn=7)
+      self.plot_sensor_trace(savedir,'u3ztt_accl','$u_{3ztt}', 'accelerometers',self.accl_uz,qn=8)
 
 # -  -  -  -  -  -  -  -  -  -  -  -  -  -  -  -  -  -  -  -  -  -  -  -  -  -  -  -  -  -  -  -  -   
 # -  -  -  -  -  -  -  -  -  -  -  -  -  -  -  -  -  -  -  -  -  -  -  -  -  -  -  -  -  -  -  -  -   
@@ -503,7 +504,7 @@ class blockdata:
         self.mics_u[c,n,6]  = up3(x,y,z)
         self.mics_u[c,n,7]  = (u3(x,y,z)-upp3(x,y,z))/(2*dt)
         self.mics_u[c,n,8]  = (2*up3(x,y,z)-u3(x,y,z)-upp3(x,y,z))/(dt*dt)
-        # x derivatives
+        # x derivatives: use dx(0)
         ux   = Function(Pv); ux   = project(  u.dx(0), Pv)
         upx  = Function(Pv); upx  = project( up.dx(0), Pv)
         uppx = Function(Pv); uppx = project(upp.dx(0), Pv)
@@ -519,7 +520,7 @@ class blockdata:
         self.mics_ux[c,n,6] = up3x(x,y,z)
         self.mics_ux[c,n,7] = (u3x(x,y,z)-upp3x(x,y,z))/(2*dt)
         self.mics_ux[c,n,8] = (2*up3x(x,y,z)-u3x(x,y,z)-upp3x(x,y,z))/(dt*dt)
-        # y derivatives
+        # y derivatives: use dx(1)
         uy   = Function(Pv); uy   = project(  u.dx(1), Pv)
         upy  = Function(Pv); upy  = project( up.dx(1), Pv)
         uppy = Function(Pv); uppy = project(upp.dx(1), Pv)
@@ -535,8 +536,8 @@ class blockdata:
         self.mics_uy[c,n,6] = up3y(x,y,z)
         self.mics_uy[c,n,7] = (u3y(x,y,z)-upp3y(x,y,z))/(2*dt)
         self.mics_uy[c,n,8] = (2*up3y(x,y,z)-u3y(x,y,z)-upp3y(x,y,z))/(dt*dt)
-        # z derivatives
-        ux   = Function(Pv); uz   = project(  u.dx(2), Pv)
+        # z derivatives: use dx(2)
+        uz   = Function(Pv); uz   = project(  u.dx(2), Pv)
         upz  = Function(Pv); upz  = project( up.dx(2), Pv)
         uppz = Function(Pv); uppz = project(upp.dx(2), Pv)
         u1z,   u2z,   u3z   = uz.split();
@@ -610,45 +611,45 @@ class blockdata:
 
     if finished and self.gfx:
       # first for u etc
-      self.plot_sensor_trace(savedir,'mics_u1',  '$u_{1}',     'microphones',self.mics_u,qn=0)
-      self.plot_sensor_trace(savedir,'mics_u1t', '$u_{1t}',    'microphones',self.mics_u,qn=1)
-      self.plot_sensor_trace(savedir,'mics_u1tt','$u_{1tt}',   'microphones',self.mics_u,qn=2)
-      self.plot_sensor_trace(savedir,'mics_u2',  '$u_{2}',     'microphones',self.mics_u,qn=3)
-      self.plot_sensor_trace(savedir,'mics_u2t', '$u_{2t}',    'microphones',self.mics_u,qn=4)
-      self.plot_sensor_trace(savedir,'mics_u2tt','$u_{2tt}',   'microphones',self.mics_u,qn=5)
-      self.plot_sensor_trace(savedir,'mics_u3',  '$u_{3}',     'microphones',self.mics_u,qn=6)
-      self.plot_sensor_trace(savedir,'mics_u3t', '$u_{3t}',    'microphones',self.mics_u,qn=7)
-      self.plot_sensor_trace(savedir,'mics_u3tt','$u_{3tt}',   'microphones',self.mics_u,qn=8)
+      self.plot_sensor_trace(savedir,'u1_mics',  '$u_{1}',     'microphones',self.mics_u,qn=0)
+      self.plot_sensor_trace(savedir,'u1t_mics', '$u_{1t}',    'microphones',self.mics_u,qn=1)
+      self.plot_sensor_trace(savedir,'u1tt_mics','$u_{1tt}',   'microphones',self.mics_u,qn=2)
+      self.plot_sensor_trace(savedir,'u2_mics',  '$u_{2}',     'microphones',self.mics_u,qn=3)
+      self.plot_sensor_trace(savedir,'u2t_mics', '$u_{2t}',    'microphones',self.mics_u,qn=4)
+      self.plot_sensor_trace(savedir,'u2tt_mics','$u_{2tt}',   'microphones',self.mics_u,qn=5)
+      self.plot_sensor_trace(savedir,'u3_mics',  '$u_{3}',     'microphones',self.mics_u,qn=6)
+      self.plot_sensor_trace(savedir,'u3t_mics', '$u_{3t}',    'microphones',self.mics_u,qn=7)
+      self.plot_sensor_trace(savedir,'u3tt_mics','$u_{3tt}',   'microphones',self.mics_u,qn=8)
       # for u_x etc..
-      self.plot_sensor_trace(savedir,'mics_u1x',  '$u_{1x}',   'microphones',self.mics_ux,qn=0)
-      self.plot_sensor_trace(savedir,'mics_u1xt', '$u_{1xt}',  'microphones',self.mics_ux,qn=1)
-      self.plot_sensor_trace(savedir,'mics_u1xtt','$u_{1xtt}', 'microphones',self.mics_ux,qn=2)
-      self.plot_sensor_trace(savedir,'mics_u2x',  '$u_{2x}',   'microphones',self.mics_ux,qn=3)
-      self.plot_sensor_trace(savedir,'mics_u2xt', '$u_{2xt}',  'microphones',self.mics_ux,qn=4)
-      self.plot_sensor_trace(savedir,'mics_u2xtt','$u_{2xtt}', 'microphones',self.mics_ux,qn=5)
-      self.plot_sensor_trace(savedir,'mics_u3x',  '$u_{3x}',   'microphones',self.mics_ux,qn=6)
-      self.plot_sensor_trace(savedir,'mics_u3xt', '$u_{3xt}',  'microphones',self.mics_ux,qn=7)
-      self.plot_sensor_trace(savedir,'mics_u3xtt','$u_{3xtt}', 'microphones',self.mics_ux,qn=8)
-      # for u_x etc..
-      self.plot_sensor_trace(savedir,'mics_u1y',  '$u_{1y}',   'microphones',self.mics_uy,qn=0)
-      self.plot_sensor_trace(savedir,'mics_u1yt', '$u_{1yt}',  'microphones',self.mics_uy,qn=1)
-      self.plot_sensor_trace(savedir,'mics_u1ytt','$u_{1ytt}', 'microphones',self.mics_uy,qn=2)
-      self.plot_sensor_trace(savedir,'mics_u2y',  '$u_{2y}',   'microphones',self.mics_uy,qn=3)
-      self.plot_sensor_trace(savedir,'mics_u2yt', '$u_{2yt}',  'microphones',self.mics_uy,qn=4)
-      self.plot_sensor_trace(savedir,'mics_u2ytt','$u_{2ytt}', 'microphones',self.mics_uy,qn=5)
-      self.plot_sensor_trace(savedir,'mics_u3y',  '$u_{3y}',   'microphones',self.mics_uy,qn=6)
-      self.plot_sensor_trace(savedir,'mics_u3yt', '$u_{3yt}',  'microphones',self.mics_uy,qn=7)
-      self.plot_sensor_trace(savedir,'mics_u3ytt','$u_{3ytt}', 'microphones',self.mics_uy,qn=8)
+      self.plot_sensor_trace(savedir,'u1x_mics',  '$u_{1x}',   'microphones',self.mics_ux,qn=0)
+      self.plot_sensor_trace(savedir,'u1xt_mics', '$u_{1xt}',  'microphones',self.mics_ux,qn=1)
+      self.plot_sensor_trace(savedir,'u1xtt_mics','$u_{1xtt}', 'microphones',self.mics_ux,qn=2)
+      self.plot_sensor_trace(savedir,'u2x_mics',  '$u_{2x}',   'microphones',self.mics_ux,qn=3)
+      self.plot_sensor_trace(savedir,'u2xt_mics', '$u_{2xt}',  'microphones',self.mics_ux,qn=4)
+      self.plot_sensor_trace(savedir,'u2xtt_mics','$u_{2xtt}', 'microphones',self.mics_ux,qn=5)
+      self.plot_sensor_trace(savedir,'u3x_mics',  '$u_{3x}',   'microphones',self.mics_ux,qn=6)
+      self.plot_sensor_trace(savedir,'u3xt_mics', '$u_{3xt}',  'microphones',self.mics_ux,qn=7)
+      self.plot_sensor_trace(savedir,'u3xtt_mics','$u_{3xtt}', 'microphones',self.mics_ux,qn=8)
+      # for u_y etc..
+      self.plot_sensor_trace(savedir,'u1y_mics',  '$u_{1y}',   'microphones',self.mics_uy,qn=0)
+      self.plot_sensor_trace(savedir,'u1yt_mics', '$u_{1yt}',  'microphones',self.mics_uy,qn=1)
+      self.plot_sensor_trace(savedir,'u1ytt_mics','$u_{1ytt}', 'microphones',self.mics_uy,qn=2)
+      self.plot_sensor_trace(savedir,'u2y_mics',  '$u_{2y}',   'microphones',self.mics_uy,qn=3)
+      self.plot_sensor_trace(savedir,'u2yt_mics', '$u_{2yt}',  'microphones',self.mics_uy,qn=4)
+      self.plot_sensor_trace(savedir,'u2ytt_mics','$u_{2ytt}', 'microphones',self.mics_uy,qn=5)
+      self.plot_sensor_trace(savedir,'u3y_mics',  '$u_{3y}',   'microphones',self.mics_uy,qn=6)
+      self.plot_sensor_trace(savedir,'u3yt_mics', '$u_{3yt}',  'microphones',self.mics_uy,qn=7)
+      self.plot_sensor_trace(savedir,'u3ytt_mics','$u_{3ytt}', 'microphones',self.mics_uy,qn=8)
       # for u_z etc..
-      self.plot_sensor_trace(savedir,'mics_u1z',  '$u_{1z}',   'microphones',self.mics_uz,qn=0)
-      self.plot_sensor_trace(savedir,'mics_u1zt', '$u_{1zt}',  'microphones',self.mics_uz,qn=1)
-      self.plot_sensor_trace(savedir,'mics_u1ztt','$u_{1ztt}', 'microphones',self.mics_uz,qn=2)
-      self.plot_sensor_trace(savedir,'mics_u2z',  '$u_{2z}',   'microphones',self.mics_uz,qn=3)
-      self.plot_sensor_trace(savedir,'mics_u2zt', '$u_{2zt}',  'microphones',self.mics_uz,qn=4)
-      self.plot_sensor_trace(savedir,'mics_u2ztt','$u_{2ztt}', 'microphones',self.mics_uz,qn=5)
-      self.plot_sensor_trace(savedir,'mics_u3z',  '$u_{3z}',   'microphones',self.mics_uz,qn=6)
-      self.plot_sensor_trace(savedir,'mics_u3zt', '$u_{3zt}',  'microphones',self.mics_uz,qn=7)
-      self.plot_sensor_trace(savedir,'mics_u3ztt','$u_{3ztt}', 'microphones',self.mics_uz,qn=8)
+      self.plot_sensor_trace(savedir,'u1z_mics',  '$u_{1z}',   'microphones',self.mics_uz,qn=0)
+      self.plot_sensor_trace(savedir,'u1zt_mics', '$u_{1zt}',  'microphones',self.mics_uz,qn=1)
+      self.plot_sensor_trace(savedir,'u1ztt_mics','$u_{1ztt}', 'microphones',self.mics_uz,qn=2)
+      self.plot_sensor_trace(savedir,'u2z_mics',  '$u_{2z}',   'microphones',self.mics_uz,qn=3)
+      self.plot_sensor_trace(savedir,'u2zt_mics', '$u_{2zt}',  'microphones',self.mics_uz,qn=4)
+      self.plot_sensor_trace(savedir,'u2ztt_mics','$u_{2ztt}', 'microphones',self.mics_uz,qn=5)
+      self.plot_sensor_trace(savedir,'u3z_mics',  '$u_{3z}',   'microphones',self.mics_uz,qn=6)
+      self.plot_sensor_trace(savedir,'u3zt_mics', '$u_{3zt}',  'microphones',self.mics_uz,qn=7)
+      self.plot_sensor_trace(savedir,'u3ztt_mics','$u_{3ztt}', 'microphones',self.mics_uz,qn=8)
 
 # -  -  -  -  -  -  -  -  -  -  -  -  -  -  -  -  -  -  -  -  -  -  -  -  -  -  -  -  -  -  -  -  -   
 # -  -  -  -  -  -  -  -  -  -  -  -  -  -  -  -  -  -  -  -  -  -  -  -  -  -  -  -  -  -  -  -  -   
@@ -682,7 +683,7 @@ class blockdata:
     a = inner(sigma(u), epsilon(v))*dx
     L = dot(self.f, v)*dx + dot(T, v)*ds
 
-    # Compute solution thorugh time
+    # Compute solution through time
     u   = Function(V)
     up  = Function(V)
     upp = Function(V)
@@ -787,37 +788,50 @@ def usage():
   print("-N n or --Nxyz n      to specify Nx = Ny = Nz")
   print("-n n or --Nt n        to specify Nt")
   print("-T f or --Tfinal f    to specify final time, T")
+  print("-K   or --backup      make timestamped backup of this and postpro.py to ../backup/ and quit")
+  print("-F   or --pdf         make enscript PDF of this and postpro.py")
   print(" ")
   print("        --Nx n        to specify Nx")
   print("        --Ny n        to specify Ny")
   print("        --Nz n        to specify Nz")
-  os.system('date +%Y_%m_%d_%H-%M-%S')
-  print (time.strftime("%d/%m/%Y at %H:%M:%S"))
+#  os.system('date +%Y_%m_%d_%H-%M-%S')
+#  print(time.strftime("%d/%m/%Y at %H:%M:%S"))
+  print('\nTypical run line (after a chmod u+x ./blockdata.py ./postpro.py):')
+  print(' python ./blockdata.py -v 20 --Nt 20 --Nx 30 --Ny 10 --Nz 5 -b 300 -B 310 -g 5 | tee postpro_out.txt')
+  print(' python ./postpro.py | tee postpro_out.txt\n')
 
 # controlling routine
 if __name__ == '__main__':
 
-  # initialise for a batch of runs, we can alter class defaults here
-  bd = blockdata(T=2.0, eps=0.01, Nt=50, Nx=30, Ny=10, Nz=5)
+  # initialise for a batch of runs, we can alter class defaults here,
+#  bd = blockdata(T=2.0, eps=0.01, Nt=10, Nx=30, Ny=10, Nz=5)
+  bd = blockdata(T=2.0, eps=0.01, Nt=10, Nx=15, Ny=5, Nz=3)
+  # ... then set up the batch defaults,
+  beingloud = 0
+  gfx_step = 0
+  # where we give these runs labels (end_run doesn't get executed due to range() )
+  start_run=200; end_run=202
   
-  # and then parse the command line to alter them again if need be
+  # ... and now parse the command line to alter these defaults again if need be
   try:
-    opts, args = getopt.getopt(sys.argv[1:], "hv:b:B:g:r:R:N:n:T:X:",
+    opts, args = getopt.getopt(sys.argv[1:], "hv:b:B:g:r:R:N:n:T:X:KF",
                    [
-                    "help",           # obvious
-                    "garrulous=",     # level of verbosity
-                    "first="          # integer for first batch run label (default 1, inclusive)")
-                    "last="           # integer for last batch run label (default 2, inclusive)")
-                    "gfx=",           # if non-zero d generate gfx every d-th batch run 
-                    "rdeg=",          # FE polynomial degree
-                    "Rdeg=",          # solution polynomial degree
-                    "Nxyz=",          # set Nx = Ny = Nz to the given argument 
-                    "Nx=",            # set Nx to the given argument 
-                    "Ny=",            # set Ny to the given argument 
-                    "Nz=",            # set Nz to the given argument 
-                    "Nt=",            # set Nt to the given argument
-                    "Tfinal=",        # final time, T
-                    "example="        # integer for example number
+                    "help"         ,  # obvious
+                    "garrulous="   ,  # level of verbosity
+                    "first="       ,  # integer for first batch run label (default 1, inclusive)")
+                    "last="        ,  # integer for last batch run label (default 2, inclusive)")
+                    "gfx="         ,  # if non-zero d generate gfx every d-th batch run 
+                    "rdeg="        ,  # FE polynomial degree
+                    "Rdeg="        ,  # solution polynomial degree
+                    "Nxyz="        ,  # set Nx = Ny = Nz to the given argument 
+                    "Nx="          ,  # set Nx to the given argument 
+                    "Ny="          ,  # set Ny to the given argument 
+                    "Nz="          ,  # set Nz to the given argument 
+                    "Nt="          ,  # set Nt to the given argument
+                    "Tfinal="      ,  # final time, T
+                    "example="     ,  # integer for example number
+                    "backup"       ,  # only make timestamped backup of this and postpro.py to ../backup/
+                    "pdf"             # make enscript PDF of this and postpro.py
                     ])
 
   except getopt.GetoptError as err:
@@ -826,15 +840,11 @@ if __name__ == '__main__':
     usage()
     sys.exit(2)
 
-  beingloud = 0
-  # give these runs labels - end_run doesn't get executed due to range() 
-  start_run=200; end_run=208
-  gfx_step = 0
   # get the command line modifications and ensure consistency of class variables 
-  print('Command Line: using: ')
   for o, a in opts:
     if o in ("-v","--garrulous"):
       beingloud = int(a)
+      if beingloud > 19: print('Command Line: using: ')
       if beingloud > 19: print('loud level %d;' % beingloud),
     elif o in ("-h", "--help"):
       usage()
@@ -875,6 +885,19 @@ if __name__ == '__main__':
     elif o in ("-X", "--example"):
       example = int(a)
       if beingloud > 19: print('example %d;' % example),
+    elif o in ("-K", "--backup"):
+      os.system('DATE=`date +%Y_%m_%d_%H-%M-%S`; cp blockdata.py ../backup/$DATE-blockdata.py')
+      os.system('DATE=`date +%Y_%m_%d_%H-%M-%S`; cp postpro.py ../backup/$DATE-postpro.py')
+      if beingloud > 19: print('backing up this and postpro.py to ../backup/;'),
+      exit(0)
+    elif o in ("-F", "--pdf"):
+      enscrstr = 'enscript --color=1 --margins 10c::: -C -f Courier8 -E -M A4 --landscape -p '
+      os.system(enscrstr + './blockdata.ps blockdata.py')
+      os.system('ps2pdf ./blockdata.ps; rm blockdata.ps')
+      os.system(enscrstr + './postpro.ps postpro.py')
+      os.system('ps2pdf ./postpro.ps; rm postpro.ps')
+      if beingloud > 19: print('enscript PDF creation of this and postpro.py;'),
+      exit(0)
     else:
       assert False, "unhandled option"
 
@@ -886,10 +909,10 @@ if __name__ == '__main__':
   print('Running for ', xcyczc.shape[0], ' random source locations')
   if not os.path.exists(results_dir):
     os.mkdir(results_dir)
-    print(str(time.strftime("%d/%m/%Y at %H:%M:%S")),": directory " , results_dir ,  " created ")
+    print(str(time.strftime("%d/%m/%Y at %H:%M:%S"))+": directory " , results_dir ,  " created ")
   else:
-    print(str(time.strftime("%d/%m/%Y at %H:%M:%S")),": directory " , results_dir ,  " already exists")
-  
+    print(str(time.strftime("%d/%m/%Y at %H:%M:%S"))+": directory " , results_dir ,  " already exists")
+
   for run in range(start_run, end_run):
     xc,yc,zc = xcyczc[run-start_run]
     xc = bd.xL + xc*(bd.xH-bd.xL)
@@ -915,9 +938,9 @@ if __name__ == '__main__':
 
     # open files for sensor traces: for timesteps, u, du/dt, ... at acclerometers
     bd.tp     = open(output_dir+"/txt/times.txt","w")
-    bd.u1_a   = open(output_dir+"/txt/u1_a.txt","w");     bd.u2_a    = open(output_dir+"/txt/u2_a.txt","w");     bd.u3_a   = open(output_dir+"/txt/u3_a.txt","w"); 
-    bd.u1t_a  = open(output_dir+"/txt/u1t_a.txt","w");    bd.u2t_a   = open(output_dir+"/txt/u2t_a.txt","w");    bd.u3t_a  = open(output_dir+"/txt/u3t_a.txt","w"); 
-    bd.u1tt_a = open(output_dir+"/txt/u1tt_a.txt","w");   bd.u2tt_a  = open(output_dir+"/txt/u2tt_a.txt","w");   bd.u3tt_a = open(output_dir+"/txt/u3tt_a.txt","w"); 
+    bd.u1_a   = open(output_dir+"/txt/u1_a.txt","w");     bd.u2_a    = open(output_dir+"/txt/u2_a.txt","w");    bd.u3_a   = open(output_dir+"/txt/u3_a.txt","w"); 
+    bd.u1t_a  = open(output_dir+"/txt/u1t_a.txt","w");    bd.u2t_a   = open(output_dir+"/txt/u2t_a.txt","w");   bd.u3t_a  = open(output_dir+"/txt/u3t_a.txt","w"); 
+    bd.u1tt_a = open(output_dir+"/txt/u1tt_a.txt","w");   bd.u2tt_a  = open(output_dir+"/txt/u2tt_a.txt","w");  bd.u3tt_a = open(output_dir+"/txt/u3tt_a.txt","w"); 
 
     bd.u1x_a   = open(output_dir+"/txt/u1x_a.txt","w");   bd.u2x_a   = open(output_dir+"/txt/u2x_a.txt","w");   bd.u3x_a   = open(output_dir+"/txt/u3x_a.txt","w"); 
     bd.u1xt_a  = open(output_dir+"/txt/u1xt_a.txt","w");  bd.u2xt_a  = open(output_dir+"/txt/u2xt_a.txt","w");  bd.u3xt_a  = open(output_dir+"/txt/u3xt_a.txt","w"); 
@@ -927,9 +950,9 @@ if __name__ == '__main__':
     bd.u1yt_a  = open(output_dir+"/txt/u1yt_a.txt","w");  bd.u2yt_a  = open(output_dir+"/txt/u2yt_a.txt","w");  bd.u3yt_a  = open(output_dir+"/txt/u3yt_a.txt","w"); 
     bd.u1ytt_a = open(output_dir+"/txt/u1ytt_a.txt","w"); bd.u2ytt_a = open(output_dir+"/txt/u2ytt_a.txt","w"); bd.u3ytt_a = open(output_dir+"/txt/u3ytt_a.txt","w"); 
 
-    bd.u1z_a   = open(output_dir+"/txt/u1y_a.txt","w");   bd.u2z_a   = open(output_dir+"/txt/u2y_a.txt","w");   bd.u3z_a   = open(output_dir+"/txt/u3y_a.txt","w"); 
-    bd.u1zt_a  = open(output_dir+"/txt/u1yt_a.txt","w");  bd.u2zt_a  = open(output_dir+"/txt/u2yt_a.txt","w");  bd.u3zt_a  = open(output_dir+"/txt/u3yt_a.txt","w"); 
-    bd.u1ztt_a = open(output_dir+"/txt/u1ytt_a.txt","w"); bd.u2ztt_a = open(output_dir+"/txt/u2ytt_a.txt","w"); bd.u3ztt_a = open(output_dir+"/txt/u3ytt_a.txt","w"); 
+    bd.u1z_a   = open(output_dir+"/txt/u1z_a.txt","w");   bd.u2z_a   = open(output_dir+"/txt/u2z_a.txt","w");   bd.u3z_a   = open(output_dir+"/txt/u3z_a.txt","w"); 
+    bd.u1zt_a  = open(output_dir+"/txt/u1zt_a.txt","w");  bd.u2zt_a  = open(output_dir+"/txt/u2zt_a.txt","w");  bd.u3zt_a  = open(output_dir+"/txt/u3zt_a.txt","w"); 
+    bd.u1ztt_a = open(output_dir+"/txt/u1ztt_a.txt","w"); bd.u2ztt_a = open(output_dir+"/txt/u2ztt_a.txt","w"); bd.u3ztt_a = open(output_dir+"/txt/u3ztt_a.txt","w"); 
 
     # ... and then at microphones
     bd.u1_m   = open(output_dir+"/txt/u1_m.txt","w");     bd.u2_m    = open(output_dir+"/txt/u2_m.txt","w");    bd.u3_m    = open(output_dir+"/txt/u3_m.txt","w"); 
@@ -944,9 +967,9 @@ if __name__ == '__main__':
     bd.u1yt_m  = open(output_dir+"/txt/u1yt_m.txt","w");  bd.u2yt_m  = open(output_dir+"/txt/u2yt_m.txt","w");  bd.u3yt_m  = open(output_dir+"/txt/u3yt_m.txt","w"); 
     bd.u1ytt_m = open(output_dir+"/txt/u1ytt_m.txt","w"); bd.u2ytt_m = open(output_dir+"/txt/u2ytt_m.txt","w"); bd.u3ytt_m = open(output_dir+"/txt/u3ytt_m.txt","w"); 
 
-    bd.u1z_m   = open(output_dir+"/txt/u1y_m.txt","w");   bd.u2z_m   = open(output_dir+"/txt/u2y_m.txt","w");   bd.u3z_m   = open(output_dir+"/txt/u3y_m.txt","w"); 
-    bd.u1zt_m  = open(output_dir+"/txt/u1yt_m.txt","w");  bd.u2zt_m  = open(output_dir+"/txt/u2yt_m.txt","w");  bd.u3zt_m  = open(output_dir+"/txt/u3yt_m.txt","w"); 
-    bd.u1ztt_m = open(output_dir+"/txt/u1ytt_m.txt","w"); bd.u2ztt_m = open(output_dir+"/txt/u2ytt_m.txt","w"); bd.u3ztt_m = open(output_dir+"/txt/u3ytt_m.txt","w"); 
+    bd.u1z_m   = open(output_dir+"/txt/u1z_m.txt","w");   bd.u2z_m   = open(output_dir+"/txt/u2z_m.txt","w");   bd.u3z_m   = open(output_dir+"/txt/u3z_m.txt","w"); 
+    bd.u1zt_m  = open(output_dir+"/txt/u1zt_m.txt","w");  bd.u2zt_m  = open(output_dir+"/txt/u2zt_m.txt","w");  bd.u3zt_m  = open(output_dir+"/txt/u3zt_m.txt","w"); 
+    bd.u1ztt_m = open(output_dir+"/txt/u1ztt_m.txt","w"); bd.u2ztt_m = open(output_dir+"/txt/u2ztt_m.txt","w"); bd.u3ztt_m = open(output_dir+"/txt/u3ztt_m.txt","w"); 
 
     # open a file to keep a record of this run
     run_report = open(output_dir+"/txt/run_report.txt","w")
@@ -956,13 +979,15 @@ if __name__ == '__main__':
     dolver = subprocess.check_output("dolfin-version").decode("utf-8")
     run_report.write("dolfin version %s\n" % dolver)
     if bd.gfx:
-      run_report.write("Sensor trace graphics are being generated for this run")
+      run_report.write("Sensor trace graphics are being generated for this run\n")
     else:
-      run_report.write("Sensor trace graphics are not being generated for this run")
-    run_report.write("T = %e; eps = %e \n" % (bd.T, bd.eps) )
-    run_report.write("xL,xH,yL,yH,zL,zH = %e, %e, %e, %e, %e, %e, " % (bd.xL, bd.xH, bd.yL, bd.yH, bd.zL, bd.zH) )
+      run_report.write("Sensor trace graphics are not being generated for this run\n")
+    run_report.write("E = %e; nu = %e; lambda = %e; mu = %e\n" % (bd.Ey,bd.nu,bd.lmbda,bd.mu) )
+    run_report.write("T = %e; freqm = %e; freqc = %e; eps = %e\n" % (bd.T,bd.freqm,bd.freqc,bd.eps) )
+    run_report.write("(xL,xH)x(yL,yH)x(zL,zH) = (%e, %e)x(%e, %e)x(%e, %e)\n" % (bd.xL, bd.xH, bd.yL, bd.yH, bd.zL, bd.zH) )
     run_report.write("Nt = %d, Nx = %d, Ny = %d, Nz = %d\n" % (bd.Nt,bd.Nx,bd.Ny,bd.Nz) )
-    run_report.write("xc,yc,zc = (in e then f format)\n%e %e %e\n%f %f %f\n" % (xc,yc,zc,xc,yc,zc))
+    run_report.write("rdeg = %d, Rdeg = %d\n" % (bd.rdeg,bd.Rdeg) )
+    run_report.write("xc,yc,zc = (in e then f format)\n  %e %e %e\n  %f %f %f\n" % (xc,yc,zc,xc,yc,zc))
     run_report.write("\n")
     for c in range(0, bd.accl.shape[0]):
       x,y,z = bd.accl[c]
@@ -1016,5 +1041,18 @@ if __name__ == '__main__':
   plotName = "scatter_"+str(start_run)+"_"+str(end_run-1)
   save_xcyczc(xcyczc, bd, plotName, results_dir)
   
+  # create a zip file of the results directory. From (on 27 Feb 2020)
+  # https://thispointer.com/python-how-to-create-a-zip-archive-from-multiple-files-or-directory/
+  # create a ZipFile object'
+  os.system('rm -rf '+results_dir+'.zip') 
+  with ZipFile(results_dir+'.zip', 'w') as zipObj:
+    # Iterate over all the files in directory
+    for folderName, subfolders, filenames in os.walk(results_dir):
+      for filename in filenames:
+        #create complete filepath of file in directory
+        filePath = os.path.join(folderName, filename)
+        # Add file to zip
+        zipObj.write(filePath)
+
   exit(0)
 
