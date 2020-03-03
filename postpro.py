@@ -31,7 +31,7 @@ imgdata = archive.read('img_01.png')
 
 '''
 
-import os, zipfile, numpy as np
+import time, os, getopt, sys, zipfile, numpy as np
 import matplotlib
 import matplotlib.pyplot as plt
 import matplotlib.ticker as mtick
@@ -70,35 +70,130 @@ fnames_m = ["u1_m.txt"  ,"u1x_m.txt"  ,"u1y_m.txt"  ,"u1z_m.txt",
             "u2tt_m.txt","u2xtt_m.txt","u2ytt_m.txt","u2ztt_m.txt",
             "u3tt_m.txt","u3xtt_m.txt","u3ytt_m.txt","u3ztt_m.txt"]
 
-gfx = 1  # if true then make pictures
+
+# set defaults before interrogating the command line
+gfx = 0  # if true then make pictures, use the value to set the skip
 
 # these eventually can be parameterised - but best to re-configure the forward solver
-Nsamples   = 2 # 500
-Nt         = 24 # 99
+#Nsamples   = 2 # 500
+Nt         = -1 # 24 # 99
 Nsignals_a = 1+len(fnames)
 Nsignals_m = 1+len(fnames)
 Naccls     = 5
 Nmics      = 4
-start_sample = 200 # 1  # the directory number of the first in the consecutively numbered sample set
-#in_path    = './results_1_500/'
-in_zip    = './results_200_201.zip' #'../../../../data/results_1_500.zip' #'./results_1_500.zip'
-in_path    = 'results_200_201/' # 'results_1_500/'
-#in_path    = '/Users/simon/offline/MartinsML/MachineLearning/phase3/data/results_1_500' # 'results_1_500/'
+# default batch labels to post process
+start_sample = 1 # 200 # 1  # the directory number of the first in the consecutively numbered sample set
+end_sample   = 2 # one more than the label of the last sample to post process 
+#in_zip    = './results_1_2.zip' # './results_200_201.zip' #'../../../../data/results_1_500.zip'
+in_path    = 'results_1_2' # 'results_200_201/'     # 'results_1_500/'
+zf_path    = '.'
 
-acc_samples = np.zeros((Nsamples, Nt, Naccls, Nsignals_a))
-mic_samples = np.zeros((Nsamples, Nt, Nmics , Nsignals_m))
-src_xcyczc  = np.zeros((Nsamples,3))
+# -  -  -  -  -  -  -  -  -  -  -  -  -  -  -  -  -  -  -  -  -  -  -  -  -  -  -  -  -  -  -  -  -   
+# -  -  -  -  -  -  -  -  -  -  -  -  -  -  -  -  -  -  -  -  -  -  -  -  -  -  -  -  -  -  -  -  -   
+
+# help function
+def usage():
+  print("-h   or --help")
+  print("-v n or --garrulous n for verbosity")
+  print("-b n or --first n     int label for first batch runs to post process (default 1, inclusive)")
+  print("-B n or --last n      int label for  last batch runs to post process (default 2, inclusive)")
+  print("-g n or --gfx  n      ask for graphics in ./gfx, for every n-th batch starting with the first")
+  print("-n n or --Nt n        number of output lines (discrete time levels) in the data files")
+  print("                      if n<0 or not given, Nt is determined from the first batch's times.txt")
+  print("-a n or --Na n        to specify how many accelerometers there are in the data")
+  print("-m n or --Nm n        to specify how many microphones there are in the data")
+  print("-z   or --zf          zipfile (without .zip) of batch runs (default results_1_2)")
+  print("-p   or --pzf         path to zipfile without trailing slash (default ./ )")
+  print(" ")
+  print('\nTypical run line (after a chmod u+x ./postpro.py):')
+  print(' ./postpro.py --first 200 --last 201  --Na 5 --Nm 4 --zf results_200_201 --pzf ../blockdata --gfx 10 | tee postpro_out.txt\n')
+  print(time.strftime("%d/%m/%Y at %H:%M:%S"))
+
+  
+# ... then set up the batch defaults,
+beingloud = 50
+
+# ... and now parse the command line to alter these defaults again if need be
+try:
+  opts, args = getopt.getopt(sys.argv[1:], "hv:b:B:g:n:a:m:z:p:",
+                 [
+                  "help"         ,  # obvious
+                  "garrulous="   ,  # level of verbosity
+                  "first=",         # first of batch runs to post pro (default 1, inclusive)
+                  "last=",          # last of batch runs to post pro (default 2, inclusive)
+                  "gfx=",           # graphics in ./gfx, every n-th batch (default none)
+                  "Nt=",            # how many discrete time levels in the data files (default 24)
+                  "Na=",            # how many accelerometers there are in the data (default 5)
+                  "Nm=",            # how many microphones there are in the data (default 4)
+                  "zf=",            # zipfile containing the batch runs to post pro (default results_1_2)
+                  "pzf="            # path to zipfile without trailing slash (default ./ )")
+                  ])
+
+except getopt.GetoptError as err:
+  # print help information and exit:
+  print(err) # will print something like "option -a not recognized"
+  usage()
+  sys.exit(2)
+
+# get the command line modifications and ensure consistency of class variables 
+for o, a in opts:
+  if o in ("-v","--garrulous"):
+    beingloud = int(a)
+    if beingloud > 19: print('Command Line: using: ')
+    if beingloud > 19: print('loud level %d;' % beingloud),
+  elif o in ("-h", "--help"):
+    usage()
+    sys.exit()
+  elif o in ("-b", "--first"):
+    start_sample = int(a)
+    if beingloud > 19: print('start_sample = %d  (inclusive);' % start_sample),
+  elif o in ("-B", "--last"):
+    end_sample = 1+int(a)
+    if beingloud > 19: print('end_sample = %d (inclusive);' % (end_sample-1) ),
+  elif o in ("-g", "--gfx"):
+    gfx = int(a)
+    if beingloud > 19: print('gfx = %d;' % gfx),
+  elif o in ("-n", "--Nt"):
+    Nt = int(a)
+    if beingloud > 19: print('Number of lines in data files: Nt = %d;' % Nt),
+  elif o in ("-a", "--Na"):
+    Naccls = int(a)
+    if beingloud > 19: print('Number of accelerometers: Naccls = %d;' % Naccls),
+  elif o in ("-m", "--Nm"):
+    Nmics = int(a)
+    if beingloud > 19: print('Number of microphones: Nmics = %d;' % Nmics),
+  elif o in ("-z", "--zf"):
+    in_path = a
+    in_zip  = in_path + '.zip'
+    in_path = in_path + '/'
+    if beingloud > 19: print('zipfile = %s;' % in_zip),
+  elif o in ("-p", "--pzf"):
+    zf_path = a
+  else:
+    assert False, "unhandled option"
+
+if beingloud > 19: print('Command line parsing complete...')
+
+# set contingent variables
+Nsamples   = end_sample - start_sample
+
+#exit(0)
+
 
 ## obtain the source positions
 #src_f = open(in_path + "xcyczc.txt", "r")
 #srclines = src_f.readlines() 
 
-archive = zipfile.ZipFile(in_zip, 'r')
+archive = zipfile.ZipFile(zf_path+'/'+in_zip, 'r')
 src_f = archive.open(in_path + "xcyczc.txt")
 srclines = src_f.readlines() 
-
+  
+  
 #print(srclines)
 
+src_xcyczc  = np.zeros((Nsamples,3))
+
+# I M P O R T A N T: this takes all batch data - doesn'r respect Com Line arguments for gfx
 count = 0
 for line in srclines: 
   vals = np.array(line.split()); vals = np.asfarray(vals,np.float64)
@@ -119,7 +214,12 @@ src_f = archive.open(in_path+str(start_sample)+'/txt/times.txt')
 times = np.loadtxt(src_f, dtype=np.float64)
 
 #print(times)
+if Nt < 0:
+  Nt = times.shape[0]
+  if beingloud > 19: print('Automatically setting Nt = ', Nt)
 
+acc_samples = np.zeros((Nsamples, Nt, Naccls, Nsignals_a))
+mic_samples = np.zeros((Nsamples, Nt, Nmics , Nsignals_m))
 
 '''
 for sample in range(0, Nsamples):
@@ -292,8 +392,8 @@ if gfx:
     else:
       os.system('rm -rf '+savedir+'/eps/*')
 
-#  for sample in range(0, Nsamples):
-  for sample in range(0, 2):
+  for sample in range(0, Nsamples, gfx):
+#  for sample in range(0, 2):
     name_count = 0
     for fname, lnm in zip(fnames_m, fnames):
       nm,_ = fname.split('_')
@@ -352,36 +452,6 @@ SyntaxError: invalid syntax
 >>> exit()
 '''
 
-
-# -  -  -  -  -  -  -  -  -  -  -  -  -  -  -  -  -  -  -  -  -  -  -  -  -  -  -  -  -  -  -  -  -   
-# -  -  -  -  -  -  -  -  -  -  -  -  -  -  -  -  -  -  -  -  -  -  -  -  -  -  -  -  -  -  -  -  -   
-
-# help function
-def usage():
-  print("-h   or --help")
-  print("-v n or --garrulous n for verbosity")
-  print("-b n or --first n     integer label for the first of the batch runs to post process (default 1, inclusive)")
-  print("-B n or --last n      integer label for the last of the batch runs to post process (default 2, inclusive)")
-  print("-g n or --gfx  n      to ask for graphics every n'th batch run, or none if not given")
-  print("-r n or --rdeg n      to specify FE polynomial degree")
-  print("-R n or --Rdeg n      to specify 'exact solution' polynomial degree")
-  print("-X n or --example n   to specify the example to run")
-  print("-N n or --Nxyz n      to specify Nx = Ny = Nz")
-  print("-n n or --Nt n        to specify Nt")
-  print("-T f or --Tfinal f    to specify final time, T")
-  print("-K   or --backup      make timestamped backup of this and postpro.py to ../backup/ and quit")
-  print("-F   or --pdf         make enscript PDF of this and postpro.py")
-  print(" ")
-  print("        --Nx n        to specify Nx")
-  print("        --Ny n        to specify Ny")
-  print("        --Nz n        to specify Nz")
-#  os.system('date +%Y_%m_%d_%H-%M-%S')
-#  print(time.strftime("%d/%m/%Y at %H:%M:%S"))
-  print('\nTypical run line (after a chmod u+x ./blockdata.py ./postpro.py):')
-  print(' python ./blockdata.py -v 20 --Nt 20 --Nx 30 --Ny 10 --Nz 5 -b 300 -B 310 -g 5 | tee postpro_out.txt')
-  print(' python ./postpro.py | tee postpro_out.txt\n')
-
-  
 print('\nThings To Do Now')
 print('================')
 print(' - Check that output graphics agree with those from the primitive forward data')
@@ -390,3 +460,5 @@ print(' - Archive the working data to the data (or shared Dropbox) directory')
 print(' - Need these graphics to have all run time creation data, plus (xc,yc,zc)')
 print(' - ')
 print('\n')
+
+

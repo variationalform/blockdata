@@ -795,8 +795,7 @@ def usage():
 #  os.system('date +%Y_%m_%d_%H-%M-%S')
 #  print(time.strftime("%d/%m/%Y at %H:%M:%S"))
   print('\nTypical run line (after a chmod u+x ./blockdata.py ./postpro.py):')
-  print(' python ./blockdata.py -v 20 --Nt 20 --Nx 30 --Ny 10 --Nz 5 -b 300 -B 310 -g 5 | tee postpro_out.txt')
-  print(' python ./postpro.py | tee postpro_out.txt\n')
+  print(' python ./blockdata.py -v 20 --Nt 20 --Nx 30 --Ny 10 --Nz 5 -b 300 -B 310 -g 5 | tee out.txt')
 
 # controlling routine
 if __name__ == '__main__':
