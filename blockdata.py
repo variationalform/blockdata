@@ -772,10 +772,8 @@ def save_xcyczc(xcyczc, bd, plotName, results_dir):
 
 # help function
 def usage():
-  print("Solver methods available through coding...")
-  list_lu_solver_methods(); print(" ")
-  list_krylov_solver_methods(); print(" ")
-  list_krylov_solver_preconditioners(); print(" ")
+  print("Solver methods available through coding used to be available with...")
+  print("list_lu_solver_methods(); list_krylov_solver_methods(); list_krylov_solver_preconditioners()")
   print("\nCommand line options with n an integer and f a float:\n")
   print("-h   or --help")
   print("-v n or --garrulous n for verbosity")

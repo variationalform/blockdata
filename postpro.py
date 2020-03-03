@@ -352,6 +352,35 @@ SyntaxError: invalid syntax
 >>> exit()
 '''
 
+
+# -  -  -  -  -  -  -  -  -  -  -  -  -  -  -  -  -  -  -  -  -  -  -  -  -  -  -  -  -  -  -  -  -   
+# -  -  -  -  -  -  -  -  -  -  -  -  -  -  -  -  -  -  -  -  -  -  -  -  -  -  -  -  -  -  -  -  -   
+
+# help function
+def usage():
+  print("-h   or --help")
+  print("-v n or --garrulous n for verbosity")
+  print("-b n or --first n     integer label for the first of the batch runs to post process (default 1, inclusive)")
+  print("-B n or --last n      integer label for the last of the batch runs to post process (default 2, inclusive)")
+  print("-g n or --gfx  n      to ask for graphics every n'th batch run, or none if not given")
+  print("-r n or --rdeg n      to specify FE polynomial degree")
+  print("-R n or --Rdeg n      to specify 'exact solution' polynomial degree")
+  print("-X n or --example n   to specify the example to run")
+  print("-N n or --Nxyz n      to specify Nx = Ny = Nz")
+  print("-n n or --Nt n        to specify Nt")
+  print("-T f or --Tfinal f    to specify final time, T")
+  print("-K   or --backup      make timestamped backup of this and postpro.py to ../backup/ and quit")
+  print("-F   or --pdf         make enscript PDF of this and postpro.py")
+  print(" ")
+  print("        --Nx n        to specify Nx")
+  print("        --Ny n        to specify Ny")
+  print("        --Nz n        to specify Nz")
+#  os.system('date +%Y_%m_%d_%H-%M-%S')
+#  print(time.strftime("%d/%m/%Y at %H:%M:%S"))
+  print('\nTypical run line (after a chmod u+x ./blockdata.py ./postpro.py):')
+  print(' python ./blockdata.py -v 20 --Nt 20 --Nx 30 --Ny 10 --Nz 5 -b 300 -B 310 -g 5 | tee postpro_out.txt')
+  print(' python ./postpro.py | tee postpro_out.txt\n')
+
   
 print('\nThings To Do Now')
 print('================')
