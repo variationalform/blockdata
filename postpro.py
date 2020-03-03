@@ -75,17 +75,15 @@ fnames_m = ["u1_m.txt"  ,"u1x_m.txt"  ,"u1y_m.txt"  ,"u1z_m.txt",
 gfx = 0  # if true then make pictures, use the value to set the skip
 
 # these eventually can be parameterised - but best to re-configure the forward solver
-#Nsamples   = 2 # 500
-Nt         = -1 # 24 # 99
-Nsignals_a = 1+len(fnames)
-Nsignals_m = 1+len(fnames)
-Naccls     = 5
-Nmics      = 4
+Nt         = -1
+Nsignals_a =  1+len(fnames)
+Nsignals_m =  1+len(fnames)
+Naccls     =  5
+Nmics      =  4
 # default batch labels to post process
-start_sample = 1 # 200 # 1  # the directory number of the first in the consecutively numbered sample set
+start_sample = 1 # the directory number of the first in the consecutively numbered sample set
 end_sample   = 2 # one more than the label of the last sample to post process 
-#in_zip    = './results_1_2.zip' # './results_200_201.zip' #'../../../../data/results_1_500.zip'
-in_path    = 'results_1_2' # 'results_200_201/'     # 'results_1_500/'
+in_path    = 'results_1_2'
 zf_path    = '.'
 
 # -  -  -  -  -  -  -  -  -  -  -  -  -  -  -  -  -  -  -  -  -  -  -  -  -  -  -  -  -  -  -  -  -   
@@ -110,6 +108,9 @@ def usage():
   print(time.strftime("%d/%m/%Y at %H:%M:%S"))
 
   
+# -  -  -  -  -  -  -  -  -  -  -  -  -  -  -  -  -  -  -  -  -  -  -  -  -  -  -  -  -  -  -  -  -   
+# -  -  -  -  -  -  -  -  -  -  -  -  -  -  -  -  -  -  -  -  -  -  -  -  -  -  -  -  -  -  -  -  -   
+
 # ... then set up the batch defaults,
 beingloud = 50
 
@@ -177,43 +178,27 @@ if beingloud > 19: print('Command line parsing complete...')
 # set contingent variables
 Nsamples   = end_sample - start_sample
 
-#exit(0)
-
-
 ## obtain the source positions
-#src_f = open(in_path + "xcyczc.txt", "r")
-#srclines = src_f.readlines() 
-
 archive = zipfile.ZipFile(zf_path+'/'+in_zip, 'r')
 src_f = archive.open(in_path + "xcyczc.txt")
 srclines = src_f.readlines() 
-  
-  
-#print(srclines)
-
 src_xcyczc  = np.zeros((Nsamples,3))
 
 # I M P O R T A N T: this takes all batch data - doesn'r respect Com Line arguments for gfx
 count = 0
 for line in srclines: 
   vals = np.array(line.split()); vals = np.asfarray(vals,np.float64)
-  #print('count = ', count)
-  #print('line  = ', line)
-  #print('vals  = ', vals)
-  #print('array = ', np.array(line))
   for i in range(0,3):
     src_xcyczc[count,:] = vals[:]
-  #print('src_..[', count, '] = ', np.array(line))
   count = count+1
   
-#print('\n',src_xcyczc)
 src_f.close()
 
 # get the times - trust that the first sample results represents them all.
 src_f = archive.open(in_path+str(start_sample)+'/txt/times.txt')
 times = np.loadtxt(src_f, dtype=np.float64)
 
-#print(times)
+# if not forced, auto-set Nt
 if Nt < 0:
   Nt = times.shape[0]
   if beingloud > 19: print('Automatically setting Nt = ', Nt)
@@ -221,109 +206,48 @@ if Nt < 0:
 acc_samples = np.zeros((Nsamples, Nt, Naccls, Nsignals_a))
 mic_samples = np.zeros((Nsamples, Nt, Nmics , Nsignals_m))
 
-'''
-for sample in range(0, Nsamples):
-######  name_count = 0
-  for fname in fnames_a:
-    name_count = 0
-    src_f = archive.open(in_path+str(start_sample+sample)+'/txt/'+fname)
-    #src_f = open(in_path+str(1+sample)+'/txt/'+fname, "r")
-    srclines = src_f.readlines() 
-#    print(srclines); input()
-    time_count = 0
-#    print(fname)
-    for line in srclines:
-#      print(line); input()
-      acc_samples[sample, time_count, :, 0] = times[time_count]
-      vals = np.array(line.split()); vals = np.asfarray(vals,np.float64)
-      for i in range(0,Naccls):
-#        print(vals); input()
-        acc_samples[sample, time_count, :, 1+name_count] = vals[:]
-      time_count = time_count+1
-    src_f.close()
-  name_count = name_count + 1
-'''
-
 for sample in range(0, Nsamples):
   name_count = 0
   for fname in fnames_a:
     src_f = archive.open(in_path+str(start_sample+sample)+'/txt/'+fname)
     srclines = src_f.readlines() 
-#    print(srclines); input()
     time_count = 0
-#    print(fname)
     for line in srclines:
-#      print(line); input()
       acc_samples[sample, time_count, :, 0] = times[time_count]
       vals = np.array(line.split()); vals = np.asfarray(vals,np.float64)
-#      print(vals); input()
       for i in range(0,Naccls):
-#        acc_samples[sample, time_count, :, 1+name_count] = vals[:]
         acc_samples[sample, time_count, i, 1+name_count] = vals[i]
       time_count = time_count+1
     src_f.close()
     name_count = name_count + 1
 
-#print(acc_samples[0,:,0,0]); input(); print(times)
-#print(acc_samples[0,:,0,1]); input()
-
-
-
-'''
-for sample in range(0, Nsamples):
-  name_count = 0
-  for fname in fnames_m:
-#    print('Opening '+in_path+str(sample)+'/txt/'+fname)
-    src_f = archive.open(in_path+str(start_sample+sample)+'/txt/'+fname)
-    #src_f = open(in_path+str(1+sample)+'/txt/'+fname, "r")
-    srclines = src_f.readlines() 
-    time_count = 0
-    for line in srclines:
-      mic_samples[sample, time_count, :, 0] = times[time_count]
-      vals = np.array(line.split()); vals = np.asfarray(vals,float)
-      for i in range(0,Naccls): WRONG!
-        mic_samples[sample, time_count, :, 1+name_count] = vals[:]
-      time_count = time_count+1
-    src_f.close()
-  name_count = name_count + 1
-'''
-
 for sample in range(0, Nsamples):
   name_count = 0
   for fname in fnames_m:
     src_f = archive.open(in_path+str(start_sample+sample)+'/txt/'+fname)
     srclines = src_f.readlines() 
-#    print(srclines); input()
     time_count = 0
-#    print(fname)
     for line in srclines:
-#      print(line); input()
       mic_samples[sample, time_count, :, 0] = times[time_count]
       vals = np.array(line.split()); vals = np.asfarray(vals,np.float64)
-#      print(vals); input()
       for i in range(0,Nmics):
-#        mic_samples[sample, time_count, :, 1+name_count] = vals[:]
         mic_samples[sample, time_count, i, 1+name_count] = vals[i]
       time_count = time_count+1
     src_f.close()
     name_count = name_count + 1
 
-
-#np.savez('samples.npz', src_xcyczc  = src,
 np.savez_compressed('samples_z.npz',
                         src = src_xcyczc,
                         acc = acc_samples,
                         mic = mic_samples)
 
-#npzfile = np.load('samples.npz')
 npzfile = np.load('samples_z.npz')
 print('Loading samples from ', 'samples_z.npz', 'with ',sorted(npzfile.files))
 src   = npzfile['src']
 acc1  = npzfile['acc']
 mic1  = npzfile['mic']
 
-#print(acc1[0,:,0,1]); input()
-
+# -  -  -  -  -  -  -  -  -  -  -  -  -  -  -  -  -  -  -  -  -  -  -  -  -  -  -  -  -  -  -  -  -   
 # -  -  -  -  -  -  -  -  -  -  -  -  -  -  -  -  -  -  -  -  -  -  -  -  -  -  -  -  -  -  -  -  -   
 
 # these are chosen in order when plotting - for six plots or less they're unique
@@ -332,6 +256,7 @@ default_cycler                                                                  
   +  cycler(linestyle=[(0,(3,1,1,1,1,1)), '--', ':', '-.', (0,(3,5,1,5,1,5)), '-' ]) \
     )
 
+# -  -  -  -  -  -  -  -  -  -  -  -  -  -  -  -  -  -  -  -  -  -  -  -  -  -  -  -  -  -  -  -  -   
 # -  -  -  -  -  -  -  -  -  -  -  -  -  -  -  -  -  -  -  -  -  -  -  -  -  -  -  -  -  -  -  -  -   
 
 # plot sensor readings
@@ -349,7 +274,6 @@ def plot_sensor_trace(savedir, fn, u_label, sens_type, v, sample, signal):
     plt.gcf().subplots_adjust(left=0.20)
     plt.rc('lines', linewidth=nlw)
 
-#    times = np.linspace(self.dt,self.T,num=self.Nt-1, endpoint=False)
     fig = plt.figure(); ax = fig.add_subplot(111)
     ax.yaxis.set_major_formatter(mtick.FormatStrFormatter('%.2e'))
     if sens_type == 'accelerometers':
@@ -361,19 +285,17 @@ def plot_sensor_trace(savedir, fn, u_label, sens_type, v, sample, signal):
       exit(0)
     plt.xlabel(r'$t$ (seconds)',fontsize = nfs)
     plt.ylabel(u_label+'$ at the '+sens_type,fontsize = nfs)
-#    _, ax_f = plt.subplots(); ax_f.set_ylim(auto=True)
     for c in range(0, v.shape[2]):
       plt.plot(v[0,:,0,0], v[sample,:,c,signal], label=label+ str(c)+')$')
     plt.tight_layout(pad=0.4, w_pad=0.5, h_pad=1.0)
     plt.legend(loc="lower left",fontsize=nfs)
     plt.savefig(savedir+'/png/'+fn+'.png', format='png', dpi=750)
     plt.savefig(savedir+'/eps/'+fn+'.eps', format='eps', dpi=1000)
-    #plt.savefig(savedir+'/'+fn+'.png', format='png', dpi=750)
-    #plt.savefig(savedir+'/'+fn+'.eps', format='eps', dpi=1000)
     plt.grid(True)
     plt.clf()
     plt.close()
 
+# -  -  -  -  -  -  -  -  -  -  -  -  -  -  -  -  -  -  -  -  -  -  -  -  -  -  -  -  -  -  -  -  -   
 # -  -  -  -  -  -  -  -  -  -  -  -  -  -  -  -  -  -  -  -  -  -  -  -  -  -  -  -  -  -  -  -  -   
 
 if gfx:
@@ -393,11 +315,9 @@ if gfx:
       os.system('rm -rf '+savedir+'/eps/*')
 
   for sample in range(0, Nsamples, gfx):
-#  for sample in range(0, 2):
     name_count = 0
     for fname, lnm in zip(fnames_m, fnames):
       nm,_ = fname.split('_')
-#      lnm = fnames[name_count]
       tmp = nm+'_'+str(start_sample+sample)
 #      plot_sensor_trace(savedir, tmp+'_a0', '$'+lnm, 'accelerometers', acc_samples, sample, 1+name_count)
 #      plot_sensor_trace(savedir, tmp+'_m0', '$'+lnm, 'microphones', mic_samples, sample, 1+name_count)
@@ -405,52 +325,6 @@ if gfx:
       plot_sensor_trace(savedir, tmp+'_m', '$'+lnm, 'microphones', mic1, sample, 1+name_count)
       name_count = name_count+1
   
-'''
-#  for sample in range(0, Nsamples):
-  for sample in range(0, 2):
-    name_count = 0
-    for fname in fnames_m:
-      nm,_ = fname.split('_')
-      lnm = fnames[name_count]
-      plot_sensor_trace(savedir,nm+'_'+str(1+sample)+'_a', '$'+lnm, 'accelerometers', acc_samples, 1+sample, name_count)
-      plot_sensor_trace(savedir,nm+'_'+str(1+sample)+'_m', '$'+lnm, 'microphones', mic_samples, 1+sample, name_count)
-      plot_sensor_trace(savedir,nm+'_'+str(1+sample)+'_a1', '$'+lnm, 'accelerometers', acc1, 1+sample, name_count)
-      plot_sensor_trace(savedir,nm+'_'+str(1+sample)+'_m1', '$'+lnm, 'microphones', mic1, 1+sample, name_count)
-      name_count = name_count+1
-  
->>> for f1, f2 in zip(fnames, fnames_m):
-...   print(f1+'\t\t'+f2)
-... 
-u_1		u1_m.txt
-u_{1x}		u1x_m.txt
-u_{1y}		u1y_m.txt
-
-
->>> s='file.txt.m.a._a1'
->>> s.split()
-['file.txt.m.a._a1']
->>> s.split(.)
-  File "<stdin>", line 1
-    s.split(.)
-            ^
-SyntaxError: invalid syntax
->>> s.split('.')
-['file', 'txt', 'm', 'a', '_a1']
->>> ,,c,, = s.split('.')
-  File "<stdin>", line 1
-    ,,c,, = s.split('.')
-    ^
-SyntaxError: invalid syntax
->>> _,,c,, = s.split('.')
-  File "<stdin>", line 1
-    _,,c,, = s.split('.')
-      ^
-SyntaxError: invalid syntax
->>> _,_,c,_,_ = s.split('.')
->>> c
-'m'
->>> exit()
-'''
 
 print('\nThings To Do Now')
 print('================')
@@ -460,5 +334,3 @@ print(' - Archive the working data to the data (or shared Dropbox) directory')
 print(' - Need these graphics to have all run time creation data, plus (xc,yc,zc)')
 print(' - ')
 print('\n')
-
-
