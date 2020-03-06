@@ -765,7 +765,7 @@ def save_xcyczc(xcyczc, bd, plotName, results_dir):
   plt.close()
   
   # now write the file of random source points
-  np.savetxt(results_dir+'/'+"xcyczc.txt",xcyczc,delimiter=' ',newline='\n')
+  np.savetxt(results_dir+'/'+"xcyczc.txt", xcyczc, delimiter=' ', newline='\n')
 
 # -  -  -  -  -  -  -  -  -  -  -  -  -  -  -  -  -  -  -  -  -  -  -  -  -  -  -  -  -  -  -  -  -   
 # -  -  -  -  -  -  -  -  -  -  -  -  -  -  -  -  -  -  -  -  -  -  -  -  -  -  -  -  -  -  -  -  -   
@@ -908,7 +908,8 @@ if __name__ == '__main__':
     os.mkdir(results_dir)
     print(str(time.strftime("%d/%m/%Y at %H:%M:%S"))+": directory " , results_dir ,  " created ")
   else:
-    print(str(time.strftime("%d/%m/%Y at %H:%M:%S"))+": directory " , results_dir ,  " already exists")
+    os.system("rm -rf "+results_dir+"/* ; ls "+results_dir) 
+    print(str(time.strftime("%d/%m/%Y at %H:%M:%S"))+": directory " , results_dir ,  " already exists, now sterilized for new data")
 
   for run in range(start_run, end_run):
     xc,yc,zc = xcyczc[run-start_run]
@@ -968,6 +969,21 @@ if __name__ == '__main__':
     bd.u1zt_m  = open(output_dir+"/txt/u1zt_m.txt","w");  bd.u2zt_m  = open(output_dir+"/txt/u2zt_m.txt","w");  bd.u3zt_m  = open(output_dir+"/txt/u3zt_m.txt","w"); 
     bd.u1ztt_m = open(output_dir+"/txt/u1ztt_m.txt","w"); bd.u2ztt_m = open(output_dir+"/txt/u2ztt_m.txt","w"); bd.u3ztt_m = open(output_dir+"/txt/u3ztt_m.txt","w"); 
 
+    # open files to store x,y,z in columns of source, and each accelerometer and microphone, in rows
+    s_f = open(output_dir+"/txt/srce.txt","w")
+    # open files to store x,y,z (in columns) of accelerometer and microphone positions (in rows)
+    if not os.path.exists(results_dir+"/accs.txt"):
+      a_f = open(results_dir+"/accs.txt","w")
+      for c in range(0, bd.accl.shape[0]):
+        x,y,z = bd.accl[c]
+        a_f.write("%e %e %e\n" % (x,y,z) )
+      a_f.close()
+    if not os.path.exists(results_dir+"/mics.txt"):
+      m_f = open(results_dir+"/mics.txt","w")
+      for c in range(0, bd.mics.shape[0]):
+        x,y,z = bd.mics[c]
+        m_f.write("%e %e %e\n" % (x,y,z) )
+      m_f.close()
     # open a file to keep a record of this run
     run_report = open(output_dir+"/txt/run_report.txt","w")
     run_report.write("Begin...\n")
@@ -986,6 +1002,8 @@ if __name__ == '__main__':
     run_report.write("rdeg = %d, Rdeg = %d\n" % (bd.rdeg,bd.Rdeg) )
     run_report.write("xc,yc,zc = (in e then f format)\n  %e %e %e\n  %f %f %f\n" % (xc,yc,zc,xc,yc,zc))
     run_report.write("\n")
+    # output individual data sets
+    s_f.write("%f %f %f\n" % (xc,yc,zc))
     for c in range(0, bd.accl.shape[0]):
       x,y,z = bd.accl[c]
       run_report.write("accelerometer %d at (x,y,z) = (%e,%e,%e)\n" % (c,x,y,z) )
@@ -1032,7 +1050,7 @@ if __name__ == '__main__':
 
     run_report.write(str(time.strftime("%d/%m/%Y at %H:%M:%S"))); run_report.write("\n")
     run_report.write("...End\n")
-    run_report.close()
+    run_report.close(); s_f.close()
 
   # finish by saving a plot and list of the random source points
   plotName = "scatter_"+str(start_run)+"_"+str(end_run-1)
