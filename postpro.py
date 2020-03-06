@@ -102,7 +102,7 @@ def usage():
   print("-a n or --Na n        to specify how many accelerometers there are in the data")
   print("-m n or --Nm n        to specify how many microphones there are in the data")
   print("-z p or --zf p        zipfile (without .zip) of batch runs (default results_1_2)")
-  print("-N   or --Nz          normalize the resuults during postprocessing")
+  print("-N   or --Nz          normalize the results during postprocessing")
   print("-p p or --pzf p       path to zipfile without trailing slash (default ./ )")
   print(" ")
   print('\nTypical run line (after a chmod u+x ./postpro.py):')
