@@ -75,11 +75,12 @@ fnames_m = ["u1_m.txt"  ,"u1x_m.txt"  ,"u1y_m.txt"  ,"u1z_m.txt",
 gfx = 0  # if true then make pictures, use the value to set the skip
 
 # these eventually can be parameterised - but best to re-configure the forward solver
-Nt         = -1
-Nsignals_a =  1+len(fnames)
-Nsignals_m =  1+len(fnames)
-Naccls     =  5
-Nmics      =  4
+Nt          = -1
+Nsignals_a  =  1+len(fnames)
+Nsignals_m  =  1+len(fnames)
+Naccls      =  5
+Nmics       =  4
+normalizing =  0
 # default batch labels to post process
 start_sample = 1 # the directory number of the first in the consecutively numbered sample set
 end_sample   = 2 # one more than the label of the last sample to post process 
@@ -100,8 +101,9 @@ def usage():
   print("                      if n<0 or not given, Nt is determined from the first batch's times.txt")
   print("-a n or --Na n        to specify how many accelerometers there are in the data")
   print("-m n or --Nm n        to specify how many microphones there are in the data")
-  print("-z   or --zf          zipfile (without .zip) of batch runs (default results_1_2)")
-  print("-p   or --pzf         path to zipfile without trailing slash (default ./ )")
+  print("-z p or --zf p        zipfile (without .zip) of batch runs (default results_1_2)")
+  print("-N   or --Nz          normalize the resuults during postprocessing")
+  print("-p p or --pzf p       path to zipfile without trailing slash (default ./ )")
   print(" ")
   print('\nTypical run line (after a chmod u+x ./postpro.py):')
   print(' ./postpro.py --first 200 --last 201  --Na 5 --Nm 4 --zf results_200_201 --pzf ../blockdata --gfx 10 | tee postpro_out.txt\n')
@@ -116,7 +118,7 @@ beingloud = 50
 
 # ... and now parse the command line to alter these defaults again if need be
 try:
-  opts, args = getopt.getopt(sys.argv[1:], "hv:b:B:g:n:a:m:z:p:",
+  opts, args = getopt.getopt(sys.argv[1:], "hv:b:B:g:n:a:m:z:p:N",
                  [
                   "help"         ,  # obvious
                   "garrulous="   ,  # level of verbosity
@@ -127,7 +129,8 @@ try:
                   "Na=",            # how many accelerometers there are in the data (default 5)
                   "Nm=",            # how many microphones there are in the data (default 4)
                   "zf=",            # zipfile containing the batch runs to post pro (default results_1_2)
-                  "pzf="            # path to zipfile without trailing slash (default ./ )")
+                  "pzf=",           # path to zipfile without trailing slash (default ./ )")
+                  "Nz"              # normalize results as part of the postprocessing")
                   ])
 
 except getopt.GetoptError as err:
@@ -141,35 +144,39 @@ for o, a in opts:
   if o in ("-v","--garrulous"):
     beingloud = int(a)
     if beingloud > 19: print('Command Line: using: ')
-    if beingloud > 19: print('loud level %d;' % beingloud),
+    if beingloud > 19: print('loud level %d;' % beingloud)
   elif o in ("-h", "--help"):
     usage()
     sys.exit()
   elif o in ("-b", "--first"):
     start_sample = int(a)
-    if beingloud > 19: print('start_sample = %d  (inclusive);' % start_sample),
+    if beingloud > 19: print('start_sample = %d  (inclusive);' % start_sample)
   elif o in ("-B", "--last"):
     end_sample = 1+int(a)
-    if beingloud > 19: print('end_sample = %d (inclusive);' % (end_sample-1) ),
+    if beingloud > 19: print('end_sample = %d (inclusive);' % (end_sample-1) )
   elif o in ("-g", "--gfx"):
     gfx = int(a)
-    if beingloud > 19: print('gfx = %d;' % gfx),
+    if beingloud > 19: print('gfx = %d;' % gfx)
   elif o in ("-n", "--Nt"):
     Nt = int(a)
-    if beingloud > 19: print('Number of lines in data files: Nt = %d;' % Nt),
+    if beingloud > 19: print('Number of lines in data files: Nt = %d;' % Nt)
   elif o in ("-a", "--Na"):
     Naccls = int(a)
-    if beingloud > 19: print('Number of accelerometers: Naccls = %d;' % Naccls),
+    if beingloud > 19: print('Number of accelerometers: Naccls = %d;' % Naccls)
   elif o in ("-m", "--Nm"):
     Nmics = int(a)
-    if beingloud > 19: print('Number of microphones: Nmics = %d;' % Nmics),
+    if beingloud > 19: print('Number of microphones: Nmics = %d;' % Nmics)
   elif o in ("-z", "--zf"):
     in_path = a
     in_zip  = in_path + '.zip'
     in_path = in_path + '/'
-    if beingloud > 19: print('zipfile = %s;' % in_zip),
+    if beingloud > 19: print('zipfile = %s;' % in_zip)
   elif o in ("-p", "--pzf"):
     zf_path = a
+    if beingloud > 19: print('path to zipfile = %s;' % zf_path)
+  elif o in ("-N", "--Nz"):
+    normalizing = True
+    if beingloud > 19: print('normalizing results as part of postprocessing actions')
   else:
     assert False, "unhandled option"
 
@@ -235,6 +242,9 @@ for sample in range(0, Nsamples):
       time_count = time_count+1
     src_f.close()
     name_count = name_count + 1
+
+if normalizing:
+  print("Normalizing is incomplete")
 
 np.savez_compressed('samples_z.npz',
                         src = src_xcyczc,
