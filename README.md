@@ -22,4 +22,5 @@ The code is awaiting many mods:
 - intelligent and variable interfacing to the `blockdata.py` code so that post-processing is seamless. 
 
 
-  
+## `ihcc_linear_elastostatic_exact_data.py`
+Contains FEniCS expressions for generating manufactured exact solutions for checking consistency/convergence.
