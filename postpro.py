@@ -122,14 +122,14 @@ try:
                  [
                   "help"         ,  # obvious
                   "garrulous="   ,  # level of verbosity
-                  "first=",         # first of batch runs to post pro (default 1, inclusive)
-                  "last=",          # last of batch runs to post pro (default 2, inclusive)
-                  "gfx=",           # graphics in ./gfx, every n-th batch (default none)
-                  "Nt=",            # how many discrete time levels in the data files (default 24)
-                  "Na=",            # how many accelerometers there are in the data (default 5)
-                  "Nm=",            # how many microphones there are in the data (default 4)
-                  "zf=",            # zipfile containing the batch runs to post pro (default results_1_2)
-                  "pzf=",           # path to zipfile without trailing slash (default ./ )")
+                  "first="       ,  # first of batch runs to post pro (default 1, inclusive)
+                  "last="        ,  # last of batch runs to post pro (default 2, inclusive)
+                  "gfx="         ,  # graphics in ./gfx, every n-th batch (default none)
+                  "Nt="          ,  # how many discrete time levels in the data files (default 24)
+                  "Na="          ,  # how many accelerometers there are in the data (default 5)
+                  "Nm="          ,  # how many microphones there are in the data (default 4)
+                  "zf="          ,  # zipfile containing the batch runs to post pro (default results_1_2)
+                  "pzf="         ,  # path to zipfile without trailing slash (default ./ )")
                   "Nz"              # normalize results as part of the postprocessing")
                   ])
 

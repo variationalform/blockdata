@@ -1,4 +1,7 @@
 #!/anaconda3/envs/fenicsproject/bin/python
+## #!/home/icsrsss/anaconda3/envs/blockdata/bin/python
+
+
 
 from fenics import *
 import math, os, sys, getopt, time, random, subprocess, logging
@@ -99,7 +102,7 @@ class blockdata:
   Nz      = 5       # default value for the mesh density in z direction
   Nt      = 5       # default value for the number of time steps
   rdeg    = 2       # order of CG elements
-  Rdeg    = 3       # order of polynomials for exact solutions
+  Rdeg    = 5       # order of polynomials for exact solutions
   dt      = T/Nt    # time step
   #hx     = 1.0/Nx  # mesh width in x direction
   #hy     = 1.0/Ny  # mesh width in y direction
@@ -309,7 +312,8 @@ class blockdata:
     for c in range(0, self.accl.shape[0]):
       x,y,z = self.accl[c]
       if up == None:
-         rr.write("Output accl data is retarded by dt; dt, 2*dt,...,T-dt data are recorded\n")
+         if c == 0:
+           rr.write("Output accl data is retarded by dt; dt, 2*dt,...,T-dt data are recorded\n")
       else:
         u1,   u2,   u3      = u.split();
         up1,  up2,  up3     = up.split();
@@ -481,7 +485,8 @@ class blockdata:
       self.mics_ux = np.zeros((self.mics.shape[0],self.Nt-1, 9))
       self.mics_uy = np.zeros((self.mics.shape[0],self.Nt-1, 9))
       self.mics_uz = np.zeros((self.mics.shape[0],self.Nt-1, 9))
-    #                                                           This not needed if the accl routine has done it. !!!!!!!!!!!
+    # This not needed if the accl routine has done it. !!!!!!!!!!!
+    # BUT we should check that it is getting done somewhere. !!!!!!!!!!!
     #else:
       #self.tp.write("{0:10.3e}\n".format(tn-dt) )
 
@@ -489,7 +494,8 @@ class blockdata:
     for c in range(0, self.mics.shape[0]):
       x,y,z = self.mics[c]
       if up == None:
-         rr.write("Output mics data is retarded by dt; dt, 2*dt,...,T-dt data are recorded\n")
+         if c == 0:
+           rr.write("Output mics data is retarded by dt; dt, 2*dt,...,T-dt data are recorded\n")
       else:
         u1,   u2,   u3      = u.split();
         up1,  up2,  up3     = up.split();
@@ -664,22 +670,39 @@ class blockdata:
     # Define finite element space for displacement, velocity and acceleration; and a gradient space
     V = VectorFunctionSpace(mesh, "CG", self.rdeg)
     W = VectorFunctionSpace(mesh, "DG", self.rdeg-1)  # for gradients
+    xdim = 3;
+    TV = TensorFunctionSpace(mesh, "DG", self.Rdeg-1, shape=(xdim, xdim))
 
-    def bottom(x, on_boundary):
-      return on_boundary and near(x[2],self.zL)
-    # Set up boundary condition on the bottom face
-    zero = Constant((0.0, 0.0, 0.0))
-    bc = DirichletBC(V, zero, bottom)
     # Define strain and stress
     def epsilon(u):
       return 0.5*(nabla_grad(u) + nabla_grad(u).T)
     def sigma(u):
-      return self.lmbda*div(u)*Identity(d) + 2*self.mu*epsilon(u)
+      return self.lmbda*div(u)*Identity(xdim) + 2*self.mu*epsilon(u)
+    def bottom(x, on_boundary):
+      return on_boundary and near(x[2],self.zL)
+    consistency_checking = 0
+    if consistency_checking > 0:
+      from ihcc_linear_elastostatic_exact_data import lin_lin_3D as pdedata
+      #from ihcc_linear_elastostatic_exact_data import non_lin_3D as pdedata
+      coeffs = {"a":1,"b":1,"c":1}
+      ux     = pdedata.u(   coeffs, degree=self.Rdeg, t=0,                              element=V.ufl_element())
+      epsx   = pdedata.epsx(coeffs, degree=self.Rdeg, t=0,                              element=TV.ufl_element())
+      sigx   = pdedata.sigx(coeffs, degree=self.Rdeg, t=0, lmbda=self.lmbda, G=self.mu, element=TV.ufl_element())
+      self.f = pdedata.f(   coeffs, degree=self.Rdeg, t=0, lmbda=self.lmbda, G=self.mu, element=V.ufl_element())
+#      T    = pdedata.g(   coeffs, degree=self.Rdeg, t=0, lmbda=self.lmbda, G=self.mu, element=V.ufl_element())
+      bc_value = ux
+      T = dot(sigx, FacetNormal(mesh))
+
+    else:
+      bc_value = Constant((0.0, 0.0, 0.0))
+      T = Constant((0, 0, 0))
+    
+    # Set up boundary condition on the bottom face
+    bc = DirichletBC(V, bc_value, bottom)
     # Define variational problem
     u = TrialFunction(V)
-    d = u.geometric_dimension()  # space dimension
     v = TestFunction(V)
-    T = Constant((0, 0, 0))
+    d = u.geometric_dimension()  # space dimension
     a = inner(sigma(u), epsilon(v))*dx
     L = dot(self.f, v)*dx + dot(T, v)*ds
 
@@ -689,17 +712,43 @@ class blockdata:
     upp = Function(V)
     for n in range(0,1+self.Nt):
       tn = n*self.dt
-      self.f.F = self.f_mod(tn)
+      if consistency_checking > 0:
+        ux.t = tn; epsx.t = tn; sigx.t = tn; self.f.t = tn;
+        bc = DirichletBC(V, ux, bottom)
+        L = dot(self.f, v)*dx + dot(dot(sigx, FacetNormal(mesh)), v)*ds
+      else:
+        self.f.F = self.f_mod(tn)
+
       solve(a == L, u, bc)
       
-      if n == 0:
-        self.postpro_mics_readings(tn, self.dt, n, u, None, None, 0, rr, W, savedir)
-        self.postpro_accl_readings(tn, self.dt, n, u, None, None, 0, rr, W, savedir)
-      # skip n=1 and n=Nt to get central difference of velocities: finish at self.Nt-1 
-      elif n > 1 and n < 1+self.Nt:
-        self.postpro_mics_readings(tn, self.dt, n-2, u, up, upp, 1 if n == self.Nt-0 else 0, rr, W, savedir)
-        self.postpro_accl_readings(tn, self.dt, n-2, u, up, upp, 1 if n == self.Nt-0 else 0, rr, W, savedir)
-      
+      if consistency_checking > 0:
+        # compute errors
+        # Define finite element space(s) for 'exact' solution and gradient
+        VV = VectorFunctionSpace(mesh, "CG", self.Rdeg)    # dim of mesh is implied
+        u_err_L2  = errornorm(ux, u, norm_type = "L2")
+        u_err_H1  = errornorm(ux, u, norm_type = "H1")
+        #epsh = epsilon(u); sigh = sigma(u)
+        eps_err_L2 = sqrt( assemble(inner(epsilon(u)-epsx,epsilon(u)-epsx)*dx ) )
+        sig_err_L2 = sqrt( assemble(inner(sigma(u)-sigx,sigma(u)-sigx)*dx ) )
+        # elastic-energy norm
+        uex = interpolate(ux, VV)
+        #help(errornorm) says this might be unstable
+        u_err_En = sqrt( assemble( inner(sigma(uex-u),epsilon(uex-u) )*dx()) )
+        print((  '||u-uh||_0 = {0:10.3e}  '
+                +'||u-uh||_1 = {1:10.3e}  '
+                +'||u-uh||_V = {2:10.3e}  '
+                +'||e-eh||_0 = {3:10.3e}  '
+                +'||s-sh||_0 = {4:10.3e}\n').format(
+                     u_err_L2, u_err_H1, u_err_En, eps_err_L2, sig_err_L2))
+      else:
+        if n == 0:
+          self.postpro_mics_readings(tn, self.dt, n, u, None, None, 0, rr, W, savedir)
+          self.postpro_accl_readings(tn, self.dt, n, u, None, None, 0, rr, W, savedir)
+        # skip n=1 and n=Nt to get central difference of velocities: finish at self.Nt-1 
+        elif n > 1 and n < 1+self.Nt:
+          self.postpro_mics_readings(tn, self.dt, n-2, u, up, upp, 1 if n == self.Nt-0 else 0, rr, W, savedir)
+          self.postpro_accl_readings(tn, self.dt, n-2, u, up, upp, 1 if n == self.Nt-0 else 0, rr, W, savedir)
+        
       # prepare for next time
       upp.assign(up)
       up.assign(u)
