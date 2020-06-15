@@ -3,7 +3,16 @@ More details to follow. For the moment there are just two component codes.
  
 ## `blockdata.py`
 
-*To solve a 3D linear quasistatic or viscodynamic problem using python and FEniCS <http://fenicsproject.org>. The right hand side forcing is narrowly located at a randomly chosen point in the domain, vibrating at a carrier frequency which is then modulated by a lower frequency. The response is then picked up my microphones and accelerometers at given points on the boundary.*
+A digital twin for a lab rig.
+
+*To solve a 3D linear quasistatic or viscodynamic problem using python and FEniCS <http://fenicsproject.org>. The right hand side forcing is narrowly located at a randomly chosen point in the domain, vibrating at a carrier frequency which is then modulated by a lower frequency. The response is then picked up by microphones and accelerometers at given points on the boundary.*
+
+The bar has dimensions 30cm long, by 10 wide and 5 deep. The bottom is considered to be fixed in position for all time (homogeneous essential - Dirichlet - boundary condition) and the remaining faces are traction free (homogeneous natural - Neumann - boundary condition).
+
+Based on `demo_elastodynamics.py` as downloaded on 10 Dec 2019 from
+<https://fenicsproject.org/docs/dolfin/latest/python/demos/elastodynamics>
+and also on `ft06_elasticity.py` as downloaded on 10 Dec 2019 from
+<https://github.com/hplgit/fenics-tutorial/blob/master/pub/python/vol1/ft06_elasticity.py>
 
 The code is awaiting many mods:
 
