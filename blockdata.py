@@ -1,8 +1,6 @@
 #!/anaconda3/envs/fenicsproject/bin/python
 ## #!/home/icsrsss/anaconda3/envs/blockdata/bin/python
 
-
-
 from fenics import *
 import math, os, sys, getopt, time, random, subprocess, logging
 import numpy as np
@@ -96,7 +94,9 @@ class blockdata:
   T       = 0.15    # the final time...
   freqm   = 1       # source modulation frequency
   freqc   = 2       # source carrier frequency
-  eps     = 1       # width of source pulse
+  Fo      = 1000    # amplitude of source pulse 
+  eps     = 0.001   # width of source pulse
+  const   = 0       # which mode to use for the load. See help() 
   Nx      = 30      # default value for the mesh density in x direction
   Ny      = 10      # default value for the mesh density in y direction
   Nz      = 5       # default value for the mesh density in z direction
@@ -241,11 +241,11 @@ class blockdata:
   f = Expression(("F*exp(-( (x[0]-xc)*(x[0]-xc)+(x[1]-yc)*(x[1]-yc)+(x[2]-zc)*(x[2]-zc))/eps)",
                   "F*exp(-( (x[0]-xc)*(x[0]-xc)+(x[1]-yc)*(x[1]-yc)+(x[2]-zc)*(x[2]-zc))/eps)",
                   "F*exp(-( (x[0]-xc)*(x[0]-xc)+(x[1]-yc)*(x[1]-yc)+(x[2]-zc)*(x[2]-zc))/eps)"
-                 ), degree=2, F=0, xc=0, yc=0, zc=0, eps=1)
+                 ), degree=2, F=0, xc=0, yc=0, zc=0, eps=0.001)
 
   # temporal modulation of RHS body force f 
   def f_mod(self,t):
-    return 1000*sin(2*pi*self.freqc*t)*(sin(pi*self.freqm*t))*(sin(pi*self.freqm*t))
+    return self.Fo*sin(2*pi*self.freqc*t)*(sin(pi*self.freqm*t))*(sin(pi*self.freqm*t))
 
 # -  -  -  -  -  -  -  -  -  -  -  -  -  -  -  -  -  -  -  -  -  -  -  -  -  -  -  -  -  -  -  -  -   
 # -  -  -  -  -  -  -  -  -  -  -  -  -  -  -  -  -  -  -  -  -  -  -  -  -  -  -  -  -  -  -  -  -   
@@ -717,7 +717,7 @@ class blockdata:
         bc = DirichletBC(V, ux, bottom)
         L = dot(self.f, v)*dx + dot(dot(sigx, FacetNormal(mesh)), v)*ds
       else:
-        self.f.F = self.f_mod(tn)
+        self.f.F = self.Fo if self.const>0 else self.f_mod(tn)
 
       solve(a == L, u, bc)
       
@@ -752,6 +752,12 @@ class blockdata:
       # prepare for next time
       upp.assign(up)
       up.assign(u)
+
+      if self.const == 1:
+        # the time differences will be zero and useless here
+        self.postpro_mics_readings(tn, self.dt, n, u, u, u, 1, rr, W, savedir)
+        self.postpro_accl_readings(tn, self.dt, n, u, u, u, 1, rr, W, savedir)
+        break;
 
     # Plot solution/mesh
     #plot(mesh, title='mesh', color="red", edgecolor="black"); plt.show()
@@ -824,23 +830,30 @@ def usage():
   print("Solver methods available through coding used to be available with...")
   print("list_lu_solver_methods(); list_krylov_solver_methods(); list_krylov_solver_preconditioners()")
   print("\nCommand line options with n an integer and f a float:\n")
-  print("-h   or --help")
-  print("-v n or --garrulous n for verbosity")
-  print("-b n or --first n     integer label for the first of the batch runs (default 1, inclusive)")
-  print("-B n or --last n      integer label for the last of the batch runs (default 2, inclusive)")
-  print("-g n or --gfx  n      to ask for graphics every n'th batch run, or none if not given")
-  print("-r n or --rdeg n      to specify FE polynomial degree")
-  print("-R n or --Rdeg n      to specify 'exact solution' polynomial degree")
-  print("-X n or --example n   to specify the example to run")
-  print("-N n or --Nxyz n      to specify Nx = Ny = Nz")
-  print("-n n or --Nt n        to specify Nt")
-  print("-T f or --Tfinal f    to specify final time, T")
-  print("-K   or --backup      make timestamped backup of this and postpro.py to ../backup/ and quit")
-  print("-F   or --pdf         make enscript PDF of this and postpro.py")
+  print("-h       or --help")
+  print("-v n     or --garrulous n   for verbosity")
+  print("-b n     or --first n       integer label for the first of the batch runs (default 1, inclusive)")
+  print("-B n     or --last n        integer label for the last of the batch runs (default 2, inclusive)")
+  print("-C n     or --const n       run in constant load mode n (default 0, not constant)")
+  print("                              n=0: use vibrating pulse, step through time")
+  print("                              n=1: use linear elasticity, constant load, solve for t=0 only")
+  print("-x       or --xc x          specify xc in source location N O T NORMALIZED (xc,yc,zc) (default, random)")
+  print("-y       or --yc y          specify yc in source location N O T NORMALIZED (xc,yc,zc) (default, random)")
+  print("-z       or --zc z          specify zc in source location N O T NORMALIZED (xc,yc,zc) (default, random)")
+  print("-e n     or --eps e         specify source 'width' denominator epsilon (default, eps=0.001)")
+  print("-g n     or --gfx  n        to ask for graphics every n'th batch run, or none if not given")
+  print("-r n     or --rdeg n        to specify FE polynomial degree")
+  print("-R n     or --Rdeg n        to specify 'exact solution' polynomial degree")
+  print("-X n     or --example n     to specify the example to run")
+  print("-N n     or --Nxyz n        to specify Nx = Ny = Nz")
+  print("-n n     or --Nt n          to specify Nt")
+  print("-T f     or --Tfinal f      to specify final time, T")
+  print("-K       or --backup        make timestamped backup of this and postpro.py to ../backup/ and quit")
+  print("-F       or --pdf           make enscript PDF of this and postpro.py")
   print(" ")
-  print("        --Nx n        to specify Nx")
-  print("        --Ny n        to specify Ny")
-  print("        --Nz n        to specify Nz")
+  print("            --Nx n          to specify Nx")
+  print("            --Ny n          to specify Ny")
+  print("            --Nz n          to specify Nz")
 #  os.system('date +%Y_%m_%d_%H-%M-%S')
 #  print(time.strftime("%d/%m/%Y at %H:%M:%S"))
   print('\nTypical run line (after a chmod u+x ./blockdata.py ./postpro.py):')
@@ -850,22 +863,27 @@ def usage():
 if __name__ == '__main__':
 
   # initialise for a batch of runs, we can alter class defaults here,
-#  bd = blockdata(T=2.0, eps=0.01, Nt=10, Nx=30, Ny=10, Nz=5)
-  bd = blockdata(T=2.0, eps=0.01, Nt=10, Nx=15, Ny=5, Nz=3)
+  bd = blockdata(T=2.0, eps=0.001, Nt=10, Nx=15, Ny=5, Nz=3)
   # ... then set up the batch defaults,
   beingloud = 0
   gfx_step = 0
   # where we give these runs labels (end_run doesn't get executed due to range() )
   start_run=200; end_run=202
+  xc=0; yc=0; zc=0; xcyczc_is_random = 1;
   
   # ... and now parse the command line to alter these defaults again if need be
   try:
-    opts, args = getopt.getopt(sys.argv[1:], "hv:b:B:g:r:R:N:n:T:X:KF",
+    opts, args = getopt.getopt(sys.argv[1:], "hv:b:B:C:x:y:z:e:g:r:R:N:n:T:X:KF",
                    [
                     "help"         ,  # obvious
                     "garrulous="   ,  # level of verbosity
-                    "first="       ,  # integer for first batch run label (default 1, inclusive)")
-                    "last="        ,  # integer for last batch run label (default 2, inclusive)")
+                    "first="       ,  # integer for first batch run label (default 1, inclusive)
+                    "last="        ,  # integer for last batch run label (default 2, inclusive)
+                    "const="       ,  # run in constant load mode n (default 0, not constant)
+                    "xc="          ,  # specify xc in source location (xc,yc,zc) (default, random)
+                    "yc="          ,  # specify yc in source location (xc,yc,zc) (default, random)
+                    "zc="          ,  # specify zc in source location (xc,yc,zc) (default, random)
+                    "eps="         ,  # specify source 'width' denominator epsilon (default, eps=0.001)
                     "gfx="         ,  # if non-zero d generate gfx every d-th batch run 
                     "rdeg="        ,  # FE polynomial degree
                     "Rdeg="        ,  # solution polynomial degree
@@ -901,6 +919,21 @@ if __name__ == '__main__':
     elif o in ("-B", "--last"):
       end_run = 1+int(a)
       if beingloud > 19: print('end_run = %d (not inclusive);' % end_run),
+    elif o in ("-C", "--const"):
+      bd.const = int(a)
+      if beingloud > 19: print('constant mode = %d;' % bd.const),
+    elif o in ("-x", "--xc"):
+      xc = float(a); xcyczc_is_random = 0
+      if beingloud > 19: print('xc = %f;' % xc),
+    elif o in ("-y", "--yc"):
+      yc = float(a); xcyczc_is_random = 0
+      if beingloud > 19: print('yc = %f;' % yc),
+    elif o in ("-z", "--zc"):
+      zc = float(a); xcyczc_is_random = 0
+      if beingloud > 19: print('zc = %f;' % zc),
+    elif o in ("-e", "--eps"):
+      bd.eps = float(a)
+      if beingloud > 19: print('eps = %f;' % bd.eps),
     elif o in ("-g", "--gfx"):
       gfx_step = int(a)
       if beingloud > 19: print('gfx_step = %d;' % gfx_step),
@@ -951,7 +984,14 @@ if __name__ == '__main__':
 
   # create a 'results_start_end' directory, if it doesn't already exist
   results_dir = "./results_"+str(start_run)+"_"+str(end_run-1)
-  xcyczc = np.random.rand(end_run - start_run,3)
+  if xcyczc_is_random:
+    xcyczc = np.random.rand(end_run - start_run,3)
+  else:
+    # these 
+    xcyczc = np.stack( (xc*np.ones(end_run - start_run).T,
+                        yc*np.ones(end_run - start_run).T,
+                        zc*np.ones(end_run - start_run).T ), axis=-1)
+  #print('not yet normalized to domain'); print(xcyczc)
   print('Running for ', xcyczc.shape[0], ' random source locations')
   if not os.path.exists(results_dir):
     os.mkdir(results_dir)
