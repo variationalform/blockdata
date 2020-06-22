@@ -1,5 +1,7 @@
 #!/anaconda3/envs/fenicsproject/bin/python
+
 ## #!/home/icsrsss/anaconda3/envs/blockdata/bin/python
+## #!/anaconda3/envs/fenicsproject/bin/python
 
 from fenics import *
 import math, os, sys, getopt, time, random, subprocess, logging
@@ -480,6 +482,7 @@ class blockdata:
 
   # obtain and plot the microphone readings (retarded by one time step in files)
   def postpro_mics_readings(self, tn, dt, n, u, up, upp, finished, rr, Pv, savedir):
+    print('GOT HERE 1')
     if up == None:
       self.mics_u  = np.zeros((self.mics.shape[0],self.Nt-1, 9))
       self.mics_ux = np.zeros((self.mics.shape[0],self.Nt-1, 9))
@@ -491,12 +494,15 @@ class blockdata:
       #self.tp.write("{0:10.3e}\n".format(tn-dt) )
 
     # loop over each sensor, get its location and read off the traces
+    print('GOT HERE 2')
     for c in range(0, self.mics.shape[0]):
       x,y,z = self.mics[c]
       if up == None:
          if c == 0:
            rr.write("Output mics data is retarded by dt; dt, 2*dt,...,T-dt data are recorded\n")
+         print('GOT HERE 3')
       else:
+        print('GOT HERE 4')
         u1,   u2,   u3      = u.split();
         up1,  up2,  up3     = up.split();
         upp1, upp2, upp3    = upp.split()
@@ -741,23 +747,38 @@ class blockdata:
                 +'||s-sh||_0 = {4:10.3e}\n').format(
                      u_err_L2, u_err_H1, u_err_En, eps_err_L2, sig_err_L2))
       else:
-        if n == 0:
+        if self.const == 1:
+          print('GOT HERE C')
+          # first call to allocate storage and intialise
           self.postpro_mics_readings(tn, self.dt, n, u, None, None, 0, rr, W, savedir)
           self.postpro_accl_readings(tn, self.dt, n, u, None, None, 0, rr, W, savedir)
-        # skip n=1 and n=Nt to get central difference of velocities: finish at self.Nt-1 
-        elif n > 1 and n < 1+self.Nt:
-          self.postpro_mics_readings(tn, self.dt, n-2, u, up, upp, 1 if n == self.Nt-0 else 0, rr, W, savedir)
-          self.postpro_accl_readings(tn, self.dt, n-2, u, up, upp, 1 if n == self.Nt-0 else 0, rr, W, savedir)
+          # second call to save static readings - the time differences will be zero and useless here
+          self.postpro_mics_readings(tn, self.dt, n, u, u, u, 1, rr, W, savedir)
+          self.postpro_accl_readings(tn, self.dt, n, u, u, u, 1, rr, W, savedir)
+          break;
+        else:
+          if n == 0:
+            print('GOT HERE A')
+            self.postpro_mics_readings(tn, self.dt, n, u, None, None, 0, rr, W, savedir)
+            self.postpro_accl_readings(tn, self.dt, n, u, None, None, 0, rr, W, savedir)
+          # skip n=1 and n=Nt to get central difference of velocities: finish at self.Nt-1 
+          elif n > 1 and n < 1+self.Nt:
+            print('GOT HERE B')
+            self.postpro_mics_readings(tn, self.dt, n-2, u, up, upp, 1 if n == self.Nt-0 else 0, rr, W, savedir)
+            self.postpro_accl_readings(tn, self.dt, n-2, u, up, upp, 1 if n == self.Nt-0 else 0, rr, W, savedir)
         
       # prepare for next time
       upp.assign(up)
       up.assign(u)
-
-      if self.const == 1:
-        # the time differences will be zero and useless here
-        self.postpro_mics_readings(tn, self.dt, n, u, u, u, 1, rr, W, savedir)
-        self.postpro_accl_readings(tn, self.dt, n, u, u, u, 1, rr, W, savedir)
-        break;
+      
+      # check if a file called quitnow exists - if it does remove it and quit.
+      if os.path.exists('quitnow') and os.path.isfile('quitnow'):
+        print('\nA file called "quitnow" exists. Removing it and quitting')
+        print('at stepping point n/Nt = {0:d}/{1:d}\n'.format(n,self.Nt))
+        rr.write('\nA file called "quitnow" exists. Removing it and quitting\n')
+        rr.write('at stepping point n/Nt = {0:d}/{1:d}\n\n'.format(n,self.Nt))
+        os.remove('quitnow')
+        exit(0)
 
     # Plot solution/mesh
     #plot(mesh, title='mesh', color="red", edgecolor="black"); plt.show()
@@ -770,54 +791,63 @@ class blockdata:
 # This import registers the 3D projection, but is otherwise unused.
 from mpl_toolkits.mplot3d import Axes3D  # noqa: F401 unused import
 def save_xcyczc(xcyczc, bd, plotName, results_dir):
-  fig = plt.figure()
-  ax = fig.add_subplot(111, projection='3d')
-  ax.set_xlabel('x')
-  ax.set_ylabel('y')
-  ax.set_zlabel('z')
-
-  ax.auto_scale_xyz([0, 0.3], [-0.02, 0.02], [0.0, 0.04])
-  xc,yc,zc = xcyczc[:,0], xcyczc[:,1], xcyczc[:,2]
-  ax.scatter(xc, yc, zc, marker='o', s=2, c='b')
-
-  # draw the accelerometers
-  xa,ya,za = bd.accl[:,0], bd.accl[:,1], bd.accl[:,2]
-  ax.scatter(xa, ya, za, marker='x', s=6, c='k', depthshade=False)
-  # draw the microphones
-  xm,ym,zm = bd.mics[:,0], bd.mics[:,1], bd.mics[:,2]
-  ax.scatter(xm, ym, zm, marker='+', s=6, c='k', depthshade=False)
-  # draw the block domain - x lines first
-  ax.plot3D([bd.xL,bd.xH], [bd.yL,bd.yL], [bd.zL,bd.zL], 'gray', linewidth=1, linestyle='-')
-  ax.plot3D([bd.xL,bd.xH], [bd.yH,bd.yH], [bd.zL,bd.zL], 'gray', linewidth=1, linestyle='-')
-  ax.plot3D([bd.xL,bd.xH], [bd.yL,bd.yL], [bd.zH,bd.zH], 'gray', linewidth=1, linestyle='-')
-  ax.plot3D([bd.xL,bd.xH], [bd.yH,bd.yH], [bd.zH,bd.zH], 'gray', linewidth=1, linestyle='-')
-  # draw the block - y lines
-  ax.plot3D([bd.xL,bd.xL], [bd.yL,bd.yH], [bd.zL,bd.zL], 'gray', linewidth=1, linestyle='-')
-  ax.plot3D([bd.xL,bd.xL], [bd.yL,bd.yH], [bd.zH,bd.zH], 'gray', linewidth=1, linestyle='-')
-  ax.plot3D([bd.xH,bd.xH], [bd.yL,bd.yH], [bd.zL,bd.zL], 'gray', linewidth=1, linestyle='-')
-  ax.plot3D([bd.xH,bd.xH], [bd.yL,bd.yH], [bd.zH,bd.zH], 'gray', linewidth=1, linestyle='-')
-  # draw the block - y lines
-  ax.plot3D([bd.xL,bd.xL], [bd.yL,bd.yL], [bd.zL,bd.zH], 'gray', linewidth=1, linestyle='-')
-  ax.plot3D([bd.xL,bd.xL], [bd.yH,bd.yH], [bd.zL,bd.zH], 'gray', linewidth=1, linestyle='-')
-  ax.plot3D([bd.xH,bd.xH], [bd.yL,bd.yL], [bd.zL,bd.zH], 'gray', linewidth=1, linestyle='-')
-  ax.plot3D([bd.xH,bd.xH], [bd.yH,bd.yH], [bd.zL,bd.zH], 'gray', linewidth=1, linestyle='-')
-  
-  # This was taken from the following in an attempt to get the right 'Bounding Box'
-  # https://stackoverflow.com/questions/13685386/matplotlib-equal-unit-length-with-equal-aspect-ratio-z-axis-is-not-equal-to
-  #max_range = np.array([xc.max()-xc.min(), yc.max()-yc.min(), zc.max()-zc.min()]).max() / 2.0
-  max_range = (bd.xH-bd.xL) / 2
-  mid_x = (xc.max()+xc.min()) * 0.5
-  mid_y = (yc.max()+yc.min()) * 0.5
-  mid_z = (zc.max()+zc.min()) * 0.5
-  ax.set_xlim(mid_x - max_range, mid_x + max_range)
-  ax.set_ylim(mid_y - max_range, mid_y + max_range)
-  ax.set_zlim(mid_z - max_range, mid_z + max_range)
-
-  ax.view_init(20, 310)
-  ax.set_axis_off()
-  plt.savefig(results_dir+'/'+plotName+'.png', format='png', dpi=750)
-  plt.savefig(results_dir+'/'+plotName+'.eps', format='eps', dpi=1000)
-  plt.close()
+  # for runs on the server we wont be able to generate gfx
+  if bd.gfx:
+    fig = plt.figure()
+    ax = fig.add_subplot(111, projection='3d')
+    ax.set_xlabel('x')
+    ax.set_ylabel('y')
+    ax.set_zlabel('z')
+   
+    ax.auto_scale_xyz([0, 0.3], [-0.02, 0.02], [0.0, 0.04])
+    xc,yc,zc = xcyczc[:,0], xcyczc[:,1], xcyczc[:,2]
+    ax.scatter(xc, yc, zc, marker='o', s=2, c='b')
+   
+    # draw the accelerometers
+    xa,ya,za = bd.accl[:,0], bd.accl[:,1], bd.accl[:,2]
+    ax.scatter(xa, ya, za, marker='x', s=6, c='k', depthshade=False)
+    # draw the microphones
+    xm,ym,zm = bd.mics[:,0], bd.mics[:,1], bd.mics[:,2]
+    ax.scatter(xm, ym, zm, marker='+', s=6, c='k', depthshade=False)
+    # draw the block domain - x lines first
+    ax.plot3D([bd.xL,bd.xH], [bd.yL,bd.yL], [bd.zL,bd.zL], 'gray', linewidth=1, linestyle='-')
+    ax.plot3D([bd.xL,bd.xH], [bd.yH,bd.yH], [bd.zL,bd.zL], 'gray', linewidth=1, linestyle='-')
+    ax.plot3D([bd.xL,bd.xH], [bd.yL,bd.yL], [bd.zH,bd.zH], 'gray', linewidth=1, linestyle='-')
+    ax.plot3D([bd.xL,bd.xH], [bd.yH,bd.yH], [bd.zH,bd.zH], 'gray', linewidth=1, linestyle='-')
+    # draw the block - y lines
+    ax.plot3D([bd.xL,bd.xL], [bd.yL,bd.yH], [bd.zL,bd.zL], 'gray', linewidth=1, linestyle='-')
+    ax.plot3D([bd.xL,bd.xL], [bd.yL,bd.yH], [bd.zH,bd.zH], 'gray', linewidth=1, linestyle='-')
+    ax.plot3D([bd.xH,bd.xH], [bd.yL,bd.yH], [bd.zL,bd.zL], 'gray', linewidth=1, linestyle='-')
+    ax.plot3D([bd.xH,bd.xH], [bd.yL,bd.yH], [bd.zH,bd.zH], 'gray', linewidth=1, linestyle='-')
+    # draw the block - y lines
+    ax.plot3D([bd.xL,bd.xL], [bd.yL,bd.yL], [bd.zL,bd.zH], 'gray', linewidth=1, linestyle='-')
+    ax.plot3D([bd.xL,bd.xL], [bd.yH,bd.yH], [bd.zL,bd.zH], 'gray', linewidth=1, linestyle='-')
+    ax.plot3D([bd.xH,bd.xH], [bd.yL,bd.yL], [bd.zL,bd.zH], 'gray', linewidth=1, linestyle='-')
+    ax.plot3D([bd.xH,bd.xH], [bd.yH,bd.yH], [bd.zL,bd.zH], 'gray', linewidth=1, linestyle='-')
+    
+    # This was taken from the following in an attempt to get the right 'Bounding Box'
+    # https://stackoverflow.com/questions/13685386/matplotlib-equal-unit-length-with-equal-aspect-ratio-z-axis-is-not-equal-to
+    #max_range = np.array([xc.max()-xc.min(), yc.max()-yc.min(), zc.max()-zc.min()]).max() / 2.0
+    max_range = (bd.xH-bd.xL) / 2
+    mid_x = (xc.max()+xc.min()) * 0.5
+    mid_y = (yc.max()+yc.min()) * 0.5
+    mid_z = (zc.max()+zc.min()) * 0.5
+    ax.set_xlim(mid_x - max_range, mid_x + max_range)
+    ax.set_ylim(mid_y - max_range, mid_y + max_range)
+    ax.set_zlim(mid_z - max_range, mid_z + max_range)
+   
+    ax.view_init(20, 310)
+    ax.set_axis_off()
+    plt.savefig(results_dir+'/'+plotName+'.png', format='png', dpi=750)
+    plt.savefig(results_dir+'/'+plotName+'.eps', format='eps', dpi=1000)
+    plt.close()
+  else:
+    fwarn = open(results_dir+'/'+'xcyczc_warning.txt', 'w')
+    fwarn.write('\nThe xcyczc plot could not be made - the gfx option was not given.\n')
+    fwarn.write('The plot job needs to be offloaded to post processing using\n')
+    fwarn.write('the position data in the xcyczc.txt file. Plot also the acclerometer\n')
+    fwarn.write('and microphone positions from the accs.txt and mics.txt files.\n\n')
+    fwarn.close()      
   
   # now write the file of random source points
   np.savetxt(results_dir+'/'+"xcyczc.txt", xcyczc, delimiter=' ', newline='\n')
@@ -840,7 +870,8 @@ def usage():
   print("-x       or --xc x          specify xc in source location N O T NORMALIZED (xc,yc,zc) (default, random)")
   print("-y       or --yc y          specify yc in source location N O T NORMALIZED (xc,yc,zc) (default, random)")
   print("-z       or --zc z          specify zc in source location N O T NORMALIZED (xc,yc,zc) (default, random)")
-  print("-e n     or --eps e         specify source 'width' denominator epsilon (default, eps=0.001)")
+  print("-e e     or --eps e         specify source 'width' denominator epsilon (default, eps=0.001)")
+  print("-F a     or --Fo a          specify source amplitude Fo (default, Fo=1000)")
   print("-g n     or --gfx  n        to ask for graphics every n'th batch run, or none if not given")
   print("-r n     or --rdeg n        to specify FE polynomial degree")
   print("-R n     or --Rdeg n        to specify 'exact solution' polynomial degree")
@@ -856,8 +887,9 @@ def usage():
   print("            --Nz n          to specify Nz")
 #  os.system('date +%Y_%m_%d_%H-%M-%S')
 #  print(time.strftime("%d/%m/%Y at %H:%M:%S"))
+  print('\n\nIf a file called "quitnow" is found, it is removed and termination is immediate\n')
   print('\nTypical run line (after a chmod u+x ./blockdata.py ./postpro.py):')
-  print(' python ./blockdata.py -v 20 --Nt 20 --Nx 30 --Ny 10 --Nz 5 -b 300 -B 310 -g 5 | tee out.txt')
+  print(' python ./blockdata.py -v 20 --Nt 20 --Nx 30 --Ny 10 --Nz 5 -b 300 -B 310 -g 5 | tee out.txt\n')
 
 # controlling routine
 if __name__ == '__main__':
@@ -873,7 +905,7 @@ if __name__ == '__main__':
   
   # ... and now parse the command line to alter these defaults again if need be
   try:
-    opts, args = getopt.getopt(sys.argv[1:], "hv:b:B:C:x:y:z:e:g:r:R:N:n:T:X:KF",
+    opts, args = getopt.getopt(sys.argv[1:], "hv:b:B:C:x:y:z:e:F:g:r:R:N:n:T:X:KF",
                    [
                     "help"         ,  # obvious
                     "garrulous="   ,  # level of verbosity
@@ -884,6 +916,7 @@ if __name__ == '__main__':
                     "yc="          ,  # specify yc in source location (xc,yc,zc) (default, random)
                     "zc="          ,  # specify zc in source location (xc,yc,zc) (default, random)
                     "eps="         ,  # specify source 'width' denominator epsilon (default, eps=0.001)
+                    "Fo="          ,  # specify source amplitude Fo (default, Fo=1000)
                     "gfx="         ,  # if non-zero d generate gfx every d-th batch run 
                     "rdeg="        ,  # FE polynomial degree
                     "Rdeg="        ,  # solution polynomial degree
@@ -934,6 +967,9 @@ if __name__ == '__main__':
     elif o in ("-e", "--eps"):
       bd.eps = float(a)
       if beingloud > 19: print('eps = %f;' % bd.eps),
+    elif o in ("-F", "--Fo"):
+      bd.Fo = float(a)
+      if beingloud > 19: print('Fo = %f;' % bd.Fo),
     elif o in ("-g", "--gfx"):
       gfx_step = int(a)
       if beingloud > 19: print('gfx_step = %d;' % gfx_step),
@@ -1141,9 +1177,10 @@ if __name__ == '__main__':
     run_report.write("...End\n")
     run_report.close(); s_f.close()
 
-  # finish by saving a plot and list of the random source points
+  # finish by saving a plot (if gfx allowed) and list of the random source points
   plotName = "scatter_"+str(start_run)+"_"+str(end_run-1)
   save_xcyczc(xcyczc, bd, plotName, results_dir)
+    
   
   # create a zip file of the results directory. From (on 27 Feb 2020)
   # https://thispointer.com/python-how-to-create-a-zip-archive-from-multiple-files-or-directory/
