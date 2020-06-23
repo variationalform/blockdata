@@ -14,7 +14,7 @@ from zipfile import ZipFile
 
 """
 Solve 3D linear quasistatic viscoelasticity problem in time to generate virtual
-sensor data on the surface of parallelapiped block with a localised internal vibrating
+sensor data on the surface of parallelepiped block with a localised internal vibrating
 source disturbance.
 
 Copyright (c) 2020, Simon Shaw (simon.shaw89@alumni.imperial.ac.uk)
@@ -80,12 +80,12 @@ class blockdata:
   lmbda   = Ey*nu/(1+nu)/(1-2*nu) # Lame parameter
   mu      = Ey/2.0/(1+nu)         # Lame parameter, shear modulus
 
-  # accelerometer positions in rows: (x1,y1,zH),  (x2,y2,zH),  ... (x1,y1,zH)
+  # accelerometer positions on surface zH in rows: (x1,y1,zH),  (x2,y2,zH),  ... (x1,y1,zH)
   accl = np.array([[0.12, 0.01, zH],                 [0.18, 0.01, zH],
                                     [0.15, 0.00, zH],
                    [0.12,-0.01, zH],                 [0.18,-0.01, zH],
                   ])
-  # microphone positions in rows: (x1,y1,zL),  (x2,y2,zL),  ... (x1,y1,zL)
+  # microphone positions on surface zH in rows: (x1,y1,zL),  (x2,y2,zL),  ... (x1,y1,zL)
   mics = np.array([                 [0.15, 0.01, zH],
                    [0.12, 0.00, zH],                 [0.18, 0.00, zH],
                    
@@ -109,9 +109,11 @@ class blockdata:
   #hx     = 1.0/Nx  # mesh width in x direction
   #hy     = 1.0/Ny  # mesh width in y direction
   #hz     = 1.0/Nz  # mesh width in z direction
-  
-  # variables for output file handles
+
+  # variables for file handles
   tp      = None    # collect up discrete times in one file (avoid duplicates)
+  
+  # variables for output file handles for accelerometers
   u1_a    = None    # columns of u1 at each accelerometer through time
   u2_a    = None    # columns of u2 at each accelerometer through time
   u3_a    = None    # columns of u3 at each accelerometer through time
@@ -152,7 +154,7 @@ class blockdata:
   u2ztt_a = None    # columns of u2_ztt at each accelerometer through time
   u3ztt_a = None    # columns of u3_ztt at each accelerometer through time
 
-  # variables for output file handles
+  # variables for output file handles for microphones
   u1_m    = None    # columns of u1 at each microphone through time
   u2_m    = None    # columns of u2 at each microphone through time
   u3_m    = None    # columns of u3 at each microphone through time
@@ -265,7 +267,6 @@ class blockdata:
       plt.rcParams.update({'font.size': nfs})
       plt.tick_params(labelsize = nfs)
       plt.gcf().subplots_adjust(left=0.20)
-#      plt.rc('axes', prop_cycle=default_cycler)   # move this to be first command! (see postpro.sty)
       plt.rc('lines', linewidth=nlw)
 
       times = np.linspace(self.dt,self.T,num=self.Nt-1, endpoint=False)
@@ -280,12 +281,8 @@ class blockdata:
         exit(0)
       plt.xlabel(r'$t$ (seconds)',fontsize = nfs)
       plt.ylabel(u_label+'$ at the '+sens_type,fontsize = nfs)
-#      print('u_label = '+u_label+'$'); cont = input()
       for c in range(0, v.shape[0]):
         plt.plot(times, v[c,:,qn], label=label+ str(c)+')$')
-#        if u_label == '$u_{1y}':
-#          print(sens_type+' ('+str(v.shape[0])+'): u_label = '+u_label+'$ for c = '+str(c)+', and qn = '+str(qn))
-#          print(times, v[c,:,qn])
       plt.tight_layout(pad=0.4, w_pad=0.5, h_pad=1.0)
       plt.legend(loc="lower left",fontsize=nfs)
       plt.savefig(savedir+'/png/'+fn+'.png', format='png', dpi=750)
@@ -293,26 +290,40 @@ class blockdata:
       plt.grid(True)
       plt.clf()
       plt.close()
+      pass
 
+# -  -  -  -  -  -  -  -  -  -  -  -  -  -  -  -  -  -  -  -  -  -  -  -  -  -  -  -  -  -  -  -  -   
+# -  -  -  -  -  -  -  -  -  -  -  -  -  -  -  -  -  -  -  -  -  -  -  -  -  -  -  -  -  -  -  -  -   
+
+  # obtain and plot the accelerometer and microphone readings (retarded by one time step in files)
+  def record_sensor_readings(self, tn, dt, n, u, up, upp, finished, rr, Pv, savedir):
+    if up != None:
+      self.tp.write("{0:10.3e}\n".format(tn-dt) )
+    self.record_mics_readings(tn, dt, n, u, up, upp, finished, rr, Pv, savedir)
+    self.record_accl_readings(tn, dt, n, u, up, upp, finished, rr, Pv, savedir)
+    pass
+ 
 # -  -  -  -  -  -  -  -  -  -  -  -  -  -  -  -  -  -  -  -  -  -  -  -  -  -  -  -  -  -  -  -  -   
 # -  -  -  -  -  -  -  -  -  -  -  -  -  -  -  -  -  -  -  -  -  -  -  -  -  -  -  -  -  -  -  -  -   
 
 # is n being used correctly in the below? And for mics? and times array in sensor plot routine?
 
   # obtain and plot the accelerometer readings (retarded by one time step in files)
-  def postpro_accl_readings(self, tn, dt, n, u, up, upp, finished, rr, Pv, savedir):
- 
+  def record_accl_readings(self, tn, dt, n, u, up, upp, finished, rr, Pv, savedir):
+
+    # at first visit allocate storage
     if up == None:
       self.accl_u  = np.zeros((self.accl.shape[0],self.Nt-1, 9))
       self.accl_ux = np.zeros((self.accl.shape[0],self.Nt-1, 9))
       self.accl_uy = np.zeros((self.accl.shape[0],self.Nt-1, 9))
       self.accl_uz = np.zeros((self.accl.shape[0],self.Nt-1, 9))
-    else:
+#   else:
       # move this away - it isn't symmeterised in the mics routine      !!!!!!!!!!!!!!!!!!!!!!!!
-      self.tp.write("{0:10.3e}\n".format(tn-dt) )
+#     self.tp.write("{0:10.3e}\n".format(tn-dt) )
 
     for c in range(0, self.accl.shape[0]):
       x,y,z = self.accl[c]
+      # at first visit make a note of time retarded data recording
       if up == None:
          if c == 0:
            rr.write("Output accl data is retarded by dt; dt, 2*dt,...,T-dt data are recorded\n")
@@ -481,8 +492,9 @@ class blockdata:
 # -  -  -  -  -  -  -  -  -  -  -  -  -  -  -  -  -  -  -  -  -  -  -  -  -  -  -  -  -  -  -  -  -   
 
   # obtain and plot the microphone readings (retarded by one time step in files)
-  def postpro_mics_readings(self, tn, dt, n, u, up, upp, finished, rr, Pv, savedir):
-    print('GOT HERE 1')
+  def record_mics_readings(self, tn, dt, n, u, up, upp, finished, rr, Pv, savedir):
+
+    # at first visit allocate storage
     if up == None:
       self.mics_u  = np.zeros((self.mics.shape[0],self.Nt-1, 9))
       self.mics_ux = np.zeros((self.mics.shape[0],self.Nt-1, 9))
@@ -494,15 +506,13 @@ class blockdata:
       #self.tp.write("{0:10.3e}\n".format(tn-dt) )
 
     # loop over each sensor, get its location and read off the traces
-    print('GOT HERE 2')
     for c in range(0, self.mics.shape[0]):
       x,y,z = self.mics[c]
+      # at first visit make a note of time retarded data recording
       if up == None:
          if c == 0:
            rr.write("Output mics data is retarded by dt; dt, 2*dt,...,T-dt data are recorded\n")
-         print('GOT HERE 3')
       else:
-        print('GOT HERE 4')
         u1,   u2,   u3      = u.split();
         up1,  up2,  up3     = up.split();
         upp1, upp2, upp3    = upp.split()
@@ -666,14 +676,14 @@ class blockdata:
 # -  -  -  -  -  -  -  -  -  -  -  -  -  -  -  -  -  -  -  -  -  -  -  -  -  -  -  -  -  -  -  -  -   
 # -  -  -  -  -  -  -  -  -  -  -  -  -  -  -  -  -  -  -  -  -  -  -  -  -  -  -  -  -  -  -  -  -   
 
-  # manage the solution
+  # manage the solution of each instance in a batch
   def solver(self,xc,yc,zc,rr,savedir):
-    # set up the load with the current 'location' and 'width'
+    # set up the load with the current 'location' of the source
     self.f.xc = xc; self.f.yc = yc; self.f.zc = zc; 
-    # acquire the mesh and set up the essential boundary condition
+    # acquire the mesh
     mesh = BoxMesh(Point(self.xL, self.yL, self.zL),
                    Point(self.xH, self.yH, self.zH), self.Nx, self.Ny, self.Nz)
-    # Define finite element space for displacement, velocity and acceleration; and a gradient space
+    # Define finite element spaces for displacement, velocity and acceleration; and a gradient space
     V = VectorFunctionSpace(mesh, "CG", self.rdeg)
     W = VectorFunctionSpace(mesh, "DG", self.rdeg-1)  # for gradients
     xdim = 3;
@@ -684,10 +694,13 @@ class blockdata:
       return 0.5*(nabla_grad(u) + nabla_grad(u).T)
     def sigma(u):
       return self.lmbda*div(u)*Identity(xdim) + 2*self.mu*epsilon(u)
+    #  and set up the boundary subset for the essential boundary condition
     def bottom(x, on_boundary):
       return on_boundary and near(x[2],self.zL)
+    # this is for checking norms of errors for an exact solution
     consistency_checking = 0
     if consistency_checking > 0:
+      # some data for an exact manufactured solution
       from ihcc_linear_elastostatic_exact_data import lin_lin_3D as pdedata
       #from ihcc_linear_elastostatic_exact_data import non_lin_3D as pdedata
       coeffs = {"a":1,"b":1,"c":1}
@@ -695,11 +708,13 @@ class blockdata:
       epsx   = pdedata.epsx(coeffs, degree=self.Rdeg, t=0,                              element=TV.ufl_element())
       sigx   = pdedata.sigx(coeffs, degree=self.Rdeg, t=0, lmbda=self.lmbda, G=self.mu, element=TV.ufl_element())
       self.f = pdedata.f(   coeffs, degree=self.Rdeg, t=0, lmbda=self.lmbda, G=self.mu, element=V.ufl_element())
-#      T    = pdedata.g(   coeffs, degree=self.Rdeg, t=0, lmbda=self.lmbda, G=self.mu, element=V.ufl_element())
+      # we don't need the traction, but will use \sigma_ij n_j 
+      #T    = pdedata.g(   coeffs, degree=self.Rdeg, t=0, lmbda=self.lmbda, G=self.mu, element=V.ufl_element())
       bc_value = ux
       T = dot(sigx, FacetNormal(mesh))
 
     else:
+      # set up homogeneous Dirichlet and Neumann data
       bc_value = Constant((0.0, 0.0, 0.0))
       T = Constant((0, 0, 0))
     
@@ -708,23 +723,26 @@ class blockdata:
     # Define variational problem
     u = TrialFunction(V)
     v = TestFunction(V)
-    d = u.geometric_dimension()  # space dimension
+    d = u.geometric_dimension()  # space dimension (already know to be 3 from above)
     a = inner(sigma(u), epsilon(v))*dx
     L = dot(self.f, v)*dx + dot(T, v)*ds
 
     # Compute solution through time
-    u   = Function(V)
-    up  = Function(V)
-    upp = Function(V)
+    u   = Function(V)           # current value of u
+    up  = Function(V)           # previous value of u - one time step behind
+    upp = Function(V)           # value of u two time steps behind
+    # n =0, 1, 2, 3, ... , Nt
     for n in range(0,1+self.Nt):
       tn = n*self.dt
       if consistency_checking > 0:
+        # update the time in the exact solution
         ux.t = tn; epsx.t = tn; sigx.t = tn; self.f.t = tn;
         bc = DirichletBC(V, ux, bottom)
         L = dot(self.f, v)*dx + dot(dot(sigx, FacetNormal(mesh)), v)*ds
       else:
-        self.f.F = self.Fo if self.const>0 else self.f_mod(tn)
-
+        # time-modulate the source pulse, unless we're solving for constant in time response
+        self.f.F = self.Fo if self.const > 0 else self.f_mod(tn)
+      # solve for u
       solve(a == L, u, bc)
       
       if consistency_checking > 0:
@@ -747,25 +765,28 @@ class blockdata:
                 +'||s-sh||_0 = {4:10.3e}\n').format(
                      u_err_L2, u_err_H1, u_err_En, eps_err_L2, sig_err_L2))
       else:
+        # if we are solving for constant in  time response then record the sensor readings and break
         if self.const == 1:
-          print('GOT HERE C')
           # first call to allocate storage and intialise
-          self.postpro_mics_readings(tn, self.dt, n, u, None, None, 0, rr, W, savedir)
-          self.postpro_accl_readings(tn, self.dt, n, u, None, None, 0, rr, W, savedir)
+          self.record_sensor_readings(tn, self.dt, n, u, None, None, 0, rr, W, savedir)
+#         self.record_mics_readings(tn, self.dt, n, u, None, None, 0, rr, W, savedir)
+#         self.record_accl_readings(tn, self.dt, n, u, None, None, 0, rr, W, savedir)
           # second call to save static readings - the time differences will be zero and useless here
-          self.postpro_mics_readings(tn, self.dt, n, u, u, u, 1, rr, W, savedir)
-          self.postpro_accl_readings(tn, self.dt, n, u, u, u, 1, rr, W, savedir)
+          self.record_sensor_readings(tn, self.dt, n, u, u, u, 1, rr, W, savedir)
+#         self.record_mics_readings(tn, self.dt, n, u, u, u, 1, rr, W, savedir)
+#         self.record_accl_readings(tn, self.dt, n, u, u, u, 1, rr, W, savedir)
           break;
         else:
+          # at first loop call to initialize storage
           if n == 0:
-            print('GOT HERE A')
-            self.postpro_mics_readings(tn, self.dt, n, u, None, None, 0, rr, W, savedir)
-            self.postpro_accl_readings(tn, self.dt, n, u, None, None, 0, rr, W, savedir)
+            self.record_sensor_readings(tn, self.dt, n, u, None, None, 0, rr, W, savedir)
+#           self.record_mics_readings(tn, self.dt, n, u, None, None, 0, rr, W, savedir)
+#           self.record_accl_readings(tn, self.dt, n, u, None, None, 0, rr, W, savedir)
           # skip n=1 and n=Nt to get central difference of velocities: finish at self.Nt-1 
           elif n > 1 and n < 1+self.Nt:
-            print('GOT HERE B')
-            self.postpro_mics_readings(tn, self.dt, n-2, u, up, upp, 1 if n == self.Nt-0 else 0, rr, W, savedir)
-            self.postpro_accl_readings(tn, self.dt, n-2, u, up, upp, 1 if n == self.Nt-0 else 0, rr, W, savedir)
+            self.record_sensor_readings(tn, self.dt, n-2, u, up, upp, 1 if n == self.Nt-0 else 0, rr, W, savedir)
+#           self.record_mics_readings(tn, self.dt, n-2, u, up, upp, 1 if n == self.Nt-0 else 0, rr, W, savedir)
+#           self.record_accl_readings(tn, self.dt, n-2, u, up, upp, 1 if n == self.Nt-0 else 0, rr, W, savedir)
         
       # prepare for next time
       upp.assign(up)
@@ -779,6 +800,8 @@ class blockdata:
         rr.write('at stepping point n/Nt = {0:d}/{1:d}\n\n'.format(n,self.Nt))
         os.remove('quitnow')
         exit(0)
+        
+      pass
 
     # Plot solution/mesh
     #plot(mesh, title='mesh', color="red", edgecolor="black"); plt.show()
@@ -786,13 +809,13 @@ class blockdata:
 # -  -  -  -  -  -  -  -  -  -  -  -  -  -  -  -  -  -  -  -  -  -  -  -  -  -  -  -  -  -  -  -  -   
 # -  -  -  -  -  -  -  -  -  -  -  -  -  -  -  -  -  -  -  -  -  -  -  -  -  -  -  -  -  -  -  -  -   
 
-# plot the random source locations in the volume
+# plot the random source locations in the 3D volume
 # based on https://matplotlib.org/3.1.1/gallery/mplot3d/scatter3d.html
 # This import registers the 3D projection, but is otherwise unused.
 from mpl_toolkits.mplot3d import Axes3D  # noqa: F401 unused import
-def save_xcyczc(xcyczc, bd, plotName, results_dir):
+def save_xcyczc(xcyczc, bd, plotName, gfx_step, results_dir):
   # for runs on the server we wont be able to generate gfx
-  if bd.gfx:
+  if gfx_step > 0:
     fig = plt.figure()
     ax = fig.add_subplot(111, projection='3d')
     ax.set_xlabel('x')
@@ -819,7 +842,7 @@ def save_xcyczc(xcyczc, bd, plotName, results_dir):
     ax.plot3D([bd.xL,bd.xL], [bd.yL,bd.yH], [bd.zH,bd.zH], 'gray', linewidth=1, linestyle='-')
     ax.plot3D([bd.xH,bd.xH], [bd.yL,bd.yH], [bd.zL,bd.zL], 'gray', linewidth=1, linestyle='-')
     ax.plot3D([bd.xH,bd.xH], [bd.yL,bd.yH], [bd.zH,bd.zH], 'gray', linewidth=1, linestyle='-')
-    # draw the block - y lines
+    # draw the block - z lines
     ax.plot3D([bd.xL,bd.xL], [bd.yL,bd.yL], [bd.zL,bd.zH], 'gray', linewidth=1, linestyle='-')
     ax.plot3D([bd.xL,bd.xL], [bd.yH,bd.yH], [bd.zL,bd.zH], 'gray', linewidth=1, linestyle='-')
     ax.plot3D([bd.xH,bd.xH], [bd.yL,bd.yL], [bd.zL,bd.zH], 'gray', linewidth=1, linestyle='-')
@@ -827,7 +850,6 @@ def save_xcyczc(xcyczc, bd, plotName, results_dir):
     
     # This was taken from the following in an attempt to get the right 'Bounding Box'
     # https://stackoverflow.com/questions/13685386/matplotlib-equal-unit-length-with-equal-aspect-ratio-z-axis-is-not-equal-to
-    #max_range = np.array([xc.max()-xc.min(), yc.max()-yc.min(), zc.max()-zc.min()]).max() / 2.0
     max_range = (bd.xH-bd.xL) / 2
     mid_x = (xc.max()+xc.min()) * 0.5
     mid_y = (yc.max()+yc.min()) * 0.5
@@ -836,11 +858,12 @@ def save_xcyczc(xcyczc, bd, plotName, results_dir):
     ax.set_ylim(mid_y - max_range, mid_y + max_range)
     ax.set_zlim(mid_z - max_range, mid_z + max_range)
    
-    ax.view_init(20, 310)
+    ax.view_init(25, 310)
     ax.set_axis_off()
     plt.savefig(results_dir+'/'+plotName+'.png', format='png', dpi=750)
     plt.savefig(results_dir+'/'+plotName+'.eps', format='eps', dpi=1000)
     plt.close()
+  # print a warning out if we did not generate the plot, an anti-confusion measure
   else:
     fwarn = open(results_dir+'/'+'xcyczc_warning.txt', 'w')
     fwarn.write('\nThe xcyczc plot could not be made - the gfx option was not given.\n')
@@ -851,6 +874,7 @@ def save_xcyczc(xcyczc, bd, plotName, results_dir):
   
   # now write the file of random source points
   np.savetxt(results_dir+'/'+"xcyczc.txt", xcyczc, delimiter=' ', newline='\n')
+  pass
 
 # -  -  -  -  -  -  -  -  -  -  -  -  -  -  -  -  -  -  -  -  -  -  -  -  -  -  -  -  -  -  -  -  -   
 # -  -  -  -  -  -  -  -  -  -  -  -  -  -  -  -  -  -  -  -  -  -  -  -  -  -  -  -  -  -  -  -  -   
@@ -867,9 +891,9 @@ def usage():
   print("-C n     or --const n       run in constant load mode n (default 0, not constant)")
   print("                              n=0: use vibrating pulse, step through time")
   print("                              n=1: use linear elasticity, constant load, solve for t=0 only")
-  print("-x       or --xc x          specify xc in source location N O T NORMALIZED (xc,yc,zc) (default, random)")
-  print("-y       or --yc y          specify yc in source location N O T NORMALIZED (xc,yc,zc) (default, random)")
-  print("-z       or --zc z          specify zc in source location N O T NORMALIZED (xc,yc,zc) (default, random)")
+  print("-x       or --xc x          specify xc in source location (xc,yc,zc) (default, random)")
+  print("-y       or --yc y          specify yc in source location (xc,yc,zc) (default, random)")
+  print("-z       or --zc z          specify zc in source location (xc,yc,zc) (default, random)")
   print("-e e     or --eps e         specify source 'width' denominator epsilon (default, eps=0.001)")
   print("-F a     or --Fo a          specify source amplitude Fo (default, Fo=1000)")
   print("-g n     or --gfx  n        to ask for graphics every n'th batch run, or none if not given")
@@ -879,17 +903,24 @@ def usage():
   print("-N n     or --Nxyz n        to specify Nx = Ny = Nz")
   print("-n n     or --Nt n          to specify Nt")
   print("-T f     or --Tfinal f      to specify final time, T")
-  print("-K       or --backup        make timestamped backup of this and postpro.py to ../backup/ and quit")
-  print("-F       or --pdf           make enscript PDF of this and postpro.py")
+  print("-K       or --backup        make timestamped backup of this, postpro.py and ihcc... to ../backup/ and quit")
+  print("-P       or --pdf           make enscript PDF of this, postpro.py and ihcc...")
   print(" ")
   print("            --Nx n          to specify Nx")
   print("            --Ny n          to specify Ny")
   print("            --Nz n          to specify Nz")
-#  os.system('date +%Y_%m_%d_%H-%M-%S')
-#  print(time.strftime("%d/%m/%Y at %H:%M:%S"))
-  print('\n\nIf a file called "quitnow" is found, it is removed and termination is immediate\n')
-  print('\nTypical run line (after a chmod u+x ./blockdata.py ./postpro.py):')
+  #  os.system('date +%Y_%m_%d_%H-%M-%S')
+  #  print(time.strftime("%d/%m/%Y at %H:%M:%S"))
+  print('\nIf a file called "quitnow" is found, it is removed and termination is immediate\n')
+  print('Typical run line (after a chmod u+x ./blockdata.py ./postpro.py):')
   print(' python ./blockdata.py -v 20 --Nt 20 --Nx 30 --Ny 10 --Nz 5 -b 300 -B 310 -g 5 | tee out.txt\n')
+  
+  print("Default: (xL,xH)x(yL,yH)x(zL,zH) = (%e, %e)x(%e, %e)x(%e, %e)\n"
+          % (bd.xL, bd.xH, bd.yL, bd.yH, bd.zL, bd.zH) )
+  pass
+
+# -  -  -  -  -  -  -  -  -  -  -  -  -  -  -  -  -  -  -  -  -  -  -  -  -  -  -  -  -  -  -  -  -   
+# -  -  -  -  -  -  -  -  -  -  -  -  -  -  -  -  -  -  -  -  -  -  -  -  -  -  -  -  -  -  -  -  -   
 
 # controlling routine
 if __name__ == '__main__':
@@ -897,15 +928,16 @@ if __name__ == '__main__':
   # initialise for a batch of runs, we can alter class defaults here,
   bd = blockdata(T=2.0, eps=0.001, Nt=10, Nx=15, Ny=5, Nz=3)
   # ... then set up the batch defaults,
-  beingloud = 0
+  beingloud = 1
   gfx_step = 0
-  # where we give these runs labels (end_run doesn't get executed due to range() )
+  # Here we give these runs labels (end_run doesn't get executed due to range() )
   start_run=200; end_run=202
+  # the source location is usually random, unless forced on the command line
   xc=0; yc=0; zc=0; xcyczc_is_random = 1;
   
   # ... and now parse the command line to alter these defaults again if need be
   try:
-    opts, args = getopt.getopt(sys.argv[1:], "hv:b:B:C:x:y:z:e:F:g:r:R:N:n:T:X:KF",
+    opts, args = getopt.getopt(sys.argv[1:], "hv:b:B:C:x:y:z:e:F:g:r:R:N:n:T:X:KP",
                    [
                     "help"         ,  # obvious
                     "garrulous="   ,  # level of verbosity
@@ -1003,44 +1035,60 @@ if __name__ == '__main__':
     elif o in ("-K", "--backup"):
       os.system('DATE=`date +%Y_%m_%d_%H-%M-%S`; cp blockdata.py ../backup/$DATE-blockdata.py')
       os.system('DATE=`date +%Y_%m_%d_%H-%M-%S`; cp postpro.py ../backup/$DATE-postpro.py')
-      if beingloud > 19: print('backing up this and postpro.py to ../backup/;'),
+      os.system('DATE=`date +%Y_%m_%d_%H-%M-%S`; cp ihcc_linear_elastostatic_exact_data.py ../backup/$DATE-ihcc_linear_elastostatic_exact_data.py')
+      if beingloud > 19: print('backing up this, postpro.py and ihcc... to ../backup/;'),
       exit(0)
-    elif o in ("-F", "--pdf"):
+    elif o in ("-P", "--pdf"):
       enscrstr = 'enscript --color=1 --margins 10c::: -C -f Courier8 -E -M A4 --landscape -p '
       os.system(enscrstr + './blockdata.ps blockdata.py')
       os.system('ps2pdf ./blockdata.ps; rm blockdata.ps')
       os.system(enscrstr + './postpro.ps postpro.py')
       os.system('ps2pdf ./postpro.ps; rm postpro.ps')
-      if beingloud > 19: print('enscript PDF creation of this and postpro.py;'),
+      os.system(enscrstr + './ihcc_linear_elastostatic_exact_data.ps ihcc_linear_elastostatic_exact_data.py')
+      os.system('ps2pdf ./ihcc_linear_elastostatic_exact_data.ps; rm ihcc_linear_elastostatic_exact_data.ps')
+      if beingloud > 19: print('enscript PDF creation of this, postpro.py and ihcc...;'),
       exit(0)
     else:
       assert False, "unhandled option"
 
-  print(""); print('Command line parsing complete...')
+  if beingloud > 0:
+    print('* '+str(time.strftime("%d/%m/%Y at %H:%M:%S"))+' * Command line parsing complete... Beginning...')
 
   # create a 'results_start_end' directory, if it doesn't already exist
   results_dir = "./results_"+str(start_run)+"_"+str(end_run-1)
-  if xcyczc_is_random:
-    xcyczc = np.random.rand(end_run - start_run,3)
-  else:
-    # these 
-    xcyczc = np.stack( (xc*np.ones(end_run - start_run).T,
-                        yc*np.ones(end_run - start_run).T,
-                        zc*np.ones(end_run - start_run).T ), axis=-1)
-  #print('not yet normalized to domain'); print(xcyczc)
-  print('Running for ', xcyczc.shape[0], ' random source locations')
+#  if xcyczc_is_random:
+  # set up an array of random source locations, one for each instance of the batch 
+  xcyczc = np.random.rand(end_run - start_run,3)
+  # these random numbers are in [0,1], not yet scaled to the domain
+#  else:
+#    # stack the non-random command line values together
+#    xcyczc = np.stack( (xc*np.ones(end_run - start_run).T,
+#                        yc*np.ones(end_run - start_run).T,
+#                        zc*np.ones(end_run - start_run).T ), axis=-1)
+#    # NOTE: although specified, these (xc,yc,zc) are not yet normalized to the domain
+#    #print(xcyczc)
+  if beingloud > 19:
+    print('Running for ', xcyczc.shape[0], ' random source locations')
   if not os.path.exists(results_dir):
     os.mkdir(results_dir)
-    print(str(time.strftime("%d/%m/%Y at %H:%M:%S"))+": directory " , results_dir ,  " created ")
+    if beingloud > 19:
+      print(str(time.strftime("%d/%m/%Y at %H:%M:%S"))+": directory " ,
+              results_dir ,  " created ")
   else:
     os.system("rm -rf "+results_dir+"/* ; ls "+results_dir) 
-    print(str(time.strftime("%d/%m/%Y at %H:%M:%S"))+": directory " , results_dir ,  " already exists, now sterilized for new data")
+    if beingloud > 19:
+      print(str(time.strftime("%d/%m/%Y at %H:%M:%S"))+": directory " ,
+            results_dir ,  " already exists, now sterilized for new data")
 
+  # now begin running for each instance in the batch
   for run in range(start_run, end_run):
-    xc,yc,zc = xcyczc[run-start_run]
-    xc = bd.xL + xc*(bd.xH-bd.xL)
-    yc = bd.yL + yc*(bd.yH-bd.yL)
-    zc = bd.zL + zc*(bd.zH-bd.zL)
+    if xcyczc_is_random:
+      # pick out the random (0,1) source positions, scale them to the domain...
+      xc,yc,zc = xcyczc[run-start_run]
+      xc = bd.xL + xc*(bd.xH-bd.xL)
+      yc = bd.yL + yc*(bd.yH-bd.yL)
+      zc = bd.zL + zc*(bd.zH-bd.zL)
+    # ... then either insert back into the array, or overwrite with the forced values 
     xcyczc[run-start_run] = xc,yc,zc
     # determine whether to create sensor traces or not
     bd.gfx = 1 if (gfx_step and not (run-start_run) % gfx_step) else 0;
@@ -1049,10 +1097,14 @@ if __name__ == '__main__':
     # either it doesn't exist or it is dirty with old runs; deal with both 
     if not os.path.exists(output_dir):
       os.mkdir(output_dir)
-      print(str(time.strftime("%d/%m/%Y at %H:%M:%S"))+": directory " , output_dir , " created ")
+      if beingloud > 19:
+        print(str(time.strftime("%d/%m/%Y at %H:%M:%S"))+": directory " ,
+              output_dir , " created ")
     else:
       os.system("rm -rf "+output_dir+"/* ; ls "+output_dir) 
-      print(str(time.strftime("%d/%m/%Y at %H:%M:%S"))+": directory " , output_dir , " already exists, now sterilized for new data")
+      if beingloud > 19:
+        print(str(time.strftime("%d/%m/%Y at %H:%M:%S"))+": directory " ,
+              output_dir , " already exists, now sterilized for new data")
     # in either case, create the data subdirectories
     if bd.gfx:
       os.mkdir(output_dir+"/eps")
@@ -1094,7 +1146,7 @@ if __name__ == '__main__':
     bd.u1zt_m  = open(output_dir+"/txt/u1zt_m.txt","w");  bd.u2zt_m  = open(output_dir+"/txt/u2zt_m.txt","w");  bd.u3zt_m  = open(output_dir+"/txt/u3zt_m.txt","w"); 
     bd.u1ztt_m = open(output_dir+"/txt/u1ztt_m.txt","w"); bd.u2ztt_m = open(output_dir+"/txt/u2ztt_m.txt","w"); bd.u3ztt_m = open(output_dir+"/txt/u3ztt_m.txt","w"); 
 
-    # open files to store x,y,z in columns of source, and each accelerometer and microphone, in rows
+    # open files to store source location xc,yc,zc in columns
     s_f = open(output_dir+"/txt/srce.txt","w")
     # open files to store x,y,z (in columns) of accelerometer and microphone positions (in rows)
     if not os.path.exists(results_dir+"/accs.txt"):
@@ -1136,8 +1188,9 @@ if __name__ == '__main__':
     for c in range(0, bd.mics.shape[0]):
       x,y,z = bd.mics[c]
       run_report.write("microphone  %d  at  (x,y,z) = (%e,%e,%e)\n" % (c,x,y,z) )
-    # now solve
+    # now solve for this instance in the batch
     bd.solver(xc,yc,zc,run_report,output_dir)
+    # and then tidy up before moving on
     run_report.write("\n")
     # close the files
     bd.tp.close()
@@ -1179,7 +1232,7 @@ if __name__ == '__main__':
 
   # finish by saving a plot (if gfx allowed) and list of the random source points
   plotName = "scatter_"+str(start_run)+"_"+str(end_run-1)
-  save_xcyczc(xcyczc, bd, plotName, results_dir)
+  save_xcyczc(xcyczc, bd, plotName, gfx_step, results_dir)
     
   
   # create a zip file of the results directory. From (on 27 Feb 2020)
@@ -1194,6 +1247,9 @@ if __name__ == '__main__':
         filePath = os.path.join(folderName, filename)
         # Add file to zip
         zipObj.write(filePath)
+
+  if beingloud > 0:
+    print('* '+str(time.strftime("%d/%m/%Y at %H:%M:%S"))+' * Run complete... Quitting...')
 
   exit(0)
 
